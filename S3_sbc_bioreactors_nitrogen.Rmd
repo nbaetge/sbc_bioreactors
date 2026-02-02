@@ -1,0 +1,167 @@
+---
+title: "SBC Bioreactors Nitrogen"
+author: "Nicholas Baetge"
+date: "2025-08-30"
+output: html_document
+---
+
+```{r}
+ # ============================================
+# SI Figure — Nitrogen speciation (BR16-3 only)
+# Stacked bars: DON + NO3 + NO2 + NH4 = TDN
+# Means from mean_* columns; total error bars from se_tdn
+# ============================================
+
+library(tidyverse)
+library(readxl)
+library(janitor)
+suppressWarnings({ try(library(ggpattern), silent = TRUE) })  # optional hatching
+
+# ---- Load & clean ----
+data_file <- "~/github/sbc_bioreactors/data/bioreactor_data.xlsx"
+df <- read_excel(data_file, sheet = 1) %>% clean_names()
+
+dat <- df %>%
+  filter(exp == "BR16-3") %>%
+  mutate(
+    trt = case_when(is.na(trt) | trt == "" ~ "0m", TRUE ~ as.character(trt)),
+    trt = recode(trt, "0 m" = "0m", "0M" = "0m",
+                 "diatomlysate" = "DiatomLysate",
+                 "DiatomLysate" = "DiatomLysate",
+                 .default = trt),
+    stage = suppressWarnings(as.integer(bioreactor_n)),
+    stream_simple = if_else(stage == 0 | is.na(stage), "influent", "effluent")
+  )
+
+# Choose one influent & one effluent time per treatment:
+sel <- dat %>%
+  group_by(trt, stream_simple) %>%
+  summarise(
+    hours_sel = if_else(stream_simple == "influent",
+                        min(hours_elapsed, na.rm = TRUE),
+                        max(hours_elapsed, na.rm = TRUE)),
+    .groups = "drop"
+  )
+
+d_sel <- dat %>%
+  inner_join(sel, by = c("trt","stream_simple")) %>%
+  filter(hours_elapsed == hours_sel)
+
+# ---- Summarize from mean_* / se_* columns ----
+sum_n <- d_sel %>%
+  group_by(trt, stream_simple) %>%
+  summarise(
+    TDN  = mean(mean_tdn,  na.rm = TRUE),
+    se_TDN = mean(se_tdn,  na.rm = TRUE),
+    NO3  = mean(mean_no3,  na.rm = TRUE),
+    NO2  = mean(mean_no2,  na.rm = TRUE),
+    NH4  = mean(mean_nh4,  na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    DIN_parts = rowSums(cbind(NO3, NO2, NH4), na.rm = TRUE),
+    DON = pmax(TDN - DIN_parts, 0)  # ensure no tiny negatives
+  )
+
+# ---- Long format for stacked bars ----
+long_n <- sum_n %>%
+  select(trt, stream_simple, DON, NO3, NO2, NH4, TDN, se_TDN) %>%
+  pivot_longer(cols = c(DON, NO3, NO2, NH4),
+               names_to = "species", values_to = "value") %>%
+  mutate(
+    trt_lab    = recode(trt, "0m" = "0 m", "DiatomLysate" = "diatom lysate"),
+    stream_lab = if_else(stream_simple == "influent","Influent","Effluent"),
+    x_key      = factor(paste(stream_lab, trt_lab, sep = " · "),
+                        levels = c("Influent · 0 m","Effluent · 0 m",
+                                   "Influent · diatom lysate","Effluent · diatom lysate")),
+    species    = factor(species, levels = c("DON","NO3","NO2","NH4"))
+  )
+
+# Top-of-bar labels + errorbar positions
+top_labels <- sum_n %>%
+  mutate(
+    trt_lab    = recode(trt, "0m" = "0 m", "DiatomLysate" = "diatom lysate"),
+    stream_lab = if_else(stream_simple == "influent","Influent","Effluent"),
+    x_key      = factor(paste(stream_lab, trt_lab, sep = " · "),
+                        levels = c("Influent · 0 m","Effluent · 0 m",
+                                   "Influent · diatom lysate","Effluent · diatom lysate")),
+    y_lab      = TDN + se_TDN + 0.5 
+  ) %>%
+  select(x_key, TDN, se_TDN, y_lab)
+
+# ---- Aesthetics ----
+cols_species <- c(
+  DON = "#009E73",  # green
+  NO3 = "#0072B2",  # blue
+  NO2 = "#CC79A7",  # magenta
+  NH4 = "#E69F00"   # orange
+)
+species_labs <- c(
+  DON = "DON",
+  NO3 = "NO[3]^'-'",
+  NO2 = "NO[2]^'-'",
+  NH4 = "NH[4]^'+'"
+)
+use_pattern <- "ggpattern" %in% (.packages())
+
+base_theme <- theme_bw(base_size = 11) +
+  theme(
+    legend.position  = "top",
+    legend.title     = element_text(face = "bold"),
+    strip.background = element_rect(fill = "white"),
+    strip.text       = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+# ---- Plot ----
+if (use_pattern) {
+  pN <- ggplot(long_n, aes(x = x_key, y = value, fill = species)) +
+    ggpattern::geom_col_pattern(
+      aes(pattern = if_else(grepl("diatom lysate", x_key), "stripe", "none")),
+      color = "black", width = 0.75,
+      pattern_fill    = NA,
+      pattern_colour  = "black",
+      pattern_density = 0.35,
+      pattern_spacing = 0.03,
+      pattern_angle   = 45
+    ) +
+    scale_pattern_manual(
+      values = c(none = "none", stripe = "stripe"),
+      labels = c(none = "no amendment", stripe = "amendment"),
+      name   = "Treatment"
+    )
+} else {
+  pN <- ggplot(long_n, aes(x = x_key, y = value, fill = species)) +
+    geom_col(color = "black", width = 0.75)
+}
+
+pN <- pN +
+  # total labels
+  geom_text(
+    data = top_labels,
+    aes(x = x_key, y = y_lab, label = sprintf("TDN = %.1f", TDN)),
+    inherit.aes = FALSE, size = 3.2, vjust = 0
+  ) +
+  # total error bars (TDN ± se_tdn)
+  geom_errorbar(
+    data = top_labels,
+    aes(x = x_key, ymin = TDN - se_TDN, ymax = TDN + se_TDN),
+    inherit.aes = FALSE, width = 0.25, linewidth = 0.6
+  ) +
+  scale_fill_manual(
+    values = cols_species,
+    name   = "Nitrogen species",
+    labels = parse(text = species_labs[names(species_labs)])
+  ) +
+  labs(
+    x = NULL,
+    y = expression("Concentration (" * mu * "mol N L"^{-1} * ")"),
+  ) +
+  base_theme +
+  coord_cartesian(clip = "off") +
+  guides(fill = guide_legend(override.aes = list(color = NA)))
+
+pN
+
+```
+

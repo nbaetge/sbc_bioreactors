@@ -1,0 +1,970 @@
+---
+title: "SBC Bioreactors Conditioning"
+author: "Nicholas Baetge"
+date: "Last compiled on `r format(Sys.time(), '%d %B, %Y')`"
+output: github_document
+---
+
+```{r}
+# =============================
+# Conditioning-period figures
+# =============================
+
+# Packages
+library(tidyverse)
+library(readxl)
+library(scales)
+library(patchwork)
+library(broom)
+library(ggrepel)
+library(ggpattern)
+
+# -----------------------------
+# Load data
+# -----------------------------
+df <- readxl::read_excel("~/github/sbc_bioreactors/data/bioreactor_data.xlsx", sheet = 1)
+
+# -----------------------------
+# Labels / basic clean
+# -----------------------------
+water_map <- c(
+  "UCSBintake"  = "UCSB intake",
+  "goletapier"  = "Goleta Pier",
+  "stearnswarf" = "Stearns Wharf",
+  "sbc"         = "SBC"
+)
+
+trt_map <- c(
+  "flowthru"       = "flow-thru",
+  "DiatomExudate"  = "diatom exudate",
+  "DiatomLysate"   = "diatom lysate",
+  "0m"             = "0 m",
+  "0 m"            = "0 m",
+  "75m"            = "75 m",
+  "200m"           = "200 m"
+)
+
+df0 <- df %>%
+  mutate(
+    date      = as.Date(as.character(ymd), format = "%Y%m%d"),
+    water_lab = recode(water, !!!water_map, .default = water),
+    trt_lab   = recode(trt,   !!!trt_map,   .default = trt),
+    stage     = as.integer(bioreactor_n)
+  ) %>%
+  filter(is.finite(mean_doc))  # keep rows with DOC
+
+# -----------------------------
+# Experiment groups
+# -----------------------------
+exp_cond_14 <- paste0("BR14-", 1:8)
+cond_lab <- "Conditioning"
+sp_lab   <- "Post-conditioning"
+
+df0 <- df0 %>%
+  mutate(group_fac = if_else(exp %in% exp_cond_14, cond_lab, sp_lab))
+
+# -----------------------------
+# Filter for single column runs 
+# -----------------------------
+single_stage_per_run <- df0 %>%
+  filter(stage > 0) %>%
+  group_by(exp, date, water_lab, trt_lab) %>%
+  summarise(single_stage = min(stage, na.rm = TRUE), .groups = "drop")
+
+df1 <- df0 %>%
+  left_join(single_stage_per_run, by = c("exp","date","water_lab","trt_lab")) %>%
+  filter(stage == 0 | stage == single_stage) %>%
+  mutate(
+    stream        = if_else(stage == 0, "influent", paste0("stage ", single_stage)),
+    stream_simple = if_else(stage == 0, "influent", "effluent")  # for consistent coloring
+  )
+
+# -----------------------------
+# FIGURE 2 — compact bars (0 h vs 4 h), depths split, single-column 
+# -----------------------------
+# Allowed treatments + hours
+df1_fig2 <- df1 %>%
+  filter(trt_lab %in% c("flow-thru", "diatom exudate", "diatom lysate", "0 m", "75 m", "200 m"),
+         # exp != "BR16-1",
+         hours_elapsed %in% c(0, 4, 7))
+
+# Abbreviate water for tighter x labels
+water_abbr_map <- c("UCSB intake" = "UCSB", "Goleta Pier" = "Goleta", "Stearns Wharf" = "Stearns", "SBC" = "SBC")
+
+df1_fig2 <- df1_fig2 %>%
+  mutate(
+    water_abbr  = recode(water_lab, !!!water_abbr_map, .default = water_lab),
+    depth_group = case_when(
+      trt_lab %in% c("75 m", "200 m") ~ trt_lab,   # explicit depths
+      TRUE                            ~ "surface"
+    )
+  )
+
+# Inverse-variance summary per panel cell + bioreactor count
+fig2_data <- df1_fig2 %>%
+  group_by(group_fac, exp, date, water_abbr, trt_lab, depth_group,
+           stream, stream_simple, hours_elapsed) %>%
+  summarise(
+    w        = if_else(is.finite(se_doc) & se_doc > 0, 1/(se_doc^2), NA_real_),
+    w_s      = sum(w, na.rm = TRUE),
+     se_DOC   = if_else(w_s > 0, sqrt(1 / w_s),
+                       sd(mean_doc, na.rm = TRUE) / sqrt(dplyr::n())),
+    mean_DOC = if_else(w_s > 0, sum(w * mean_doc, na.rm = TRUE) / w_s,
+                       mean(mean_doc, na.rm = TRUE)),
+    n_units  = dplyr::n_distinct(bioreactor),
+    .groups  = "drop"
+  ) %>%
+  mutate(
+    exp_date = paste0(exp, " (", format(as.Date(date), "%Y-%m-%d"), ")"),
+    hours_f  = factor(hours_elapsed, levels = c(0,4, 7), labels = c("0 h","4 h", "7 h")),
+    stream_simple = factor(stream_simple, levels = c("influent","effluent")),
+    # include depth in slot so each depth shows a (influent, effluent) pair
+    x_key    = interaction(exp_date, water_abbr, depth_group, hours_f, drop = TRUE, lex.order = TRUE),
+    depth_group = factor(depth_group, levels = c("surface","75 m","200 m"))
+  ) %>% 
+  distinct()
+
+# Fixed y across facets
+y_min <- floor(min(fig2_data$mean_DOC - fig2_data$se_DOC, na.rm = TRUE))
+y_max <- ceiling(max(fig2_data$mean_DOC + fig2_data$se_DOC, na.rm = TRUE))
+
+# Compact x labels: "BR15-10\nUCSB · 75 m" (hour omitted)
+fmt_x <- function(vals) {
+  sapply(as.character(vals), function(v) {
+    parts <- strsplit(v, "\\.")[[1]]  # "exp (date).water.depth.hour"
+    expd   <- parts[1]; water <- parts[2]; depth <- parts[3]
+    exp_only <- sub(" \\(.*\\)", "", expd)
+    depth_lab <- if (depth != "surface") paste0(" · ", depth) else ""
+    paste0(exp_only, "\n", water, depth_lab)
+  })
+}
+
+# ----- REORDER single-column facet by 0 h influent DOC (high -> low by default) -----
+asc <- TRUE  # set TRUE for low -> high
+
+fig2_data_ord <- fig2_data %>%
+  mutate(x_base = interaction(exp_date, water_abbr, depth_group, drop = TRUE, lex.order = TRUE))
+
+order_tbl <- fig2_data_ord %>%
+  filter(group_fac == sp_lab, hours_f == "0 h", stream_simple == "influent") %>%
+  arrange(if (asc) mean_DOC else desc(mean_DOC)) %>%
+  distinct(x_base) %>%
+  mutate(order_rank = row_number())
+
+cond_levels <- fig2_data_ord %>%
+  filter(group_fac == cond_lab) %>%
+  distinct(x_key) %>% pull(x_key) %>% as.character()
+
+sp_levels <- fig2_data_ord %>%
+  filter(group_fac == sp_lab) %>%
+  distinct(x_key, x_base) %>%
+  left_join(order_tbl, by = "x_base") %>%
+  arrange(order_rank) %>%
+  pull(x_key) %>% as.character()
+
+all_levels <- c(cond_levels, sp_levels)
+
+fig2_data_ord <- fig2_data_ord %>%
+  mutate(x_key_reordered = factor(x_key, levels = all_levels))
+
+# Flag amendment treatments for hashing
+fig2_data_ord <- fig2_data_ord %>%
+  mutate(
+    amend_flag = trt_lab %in% c("diatom exudate", "diatom lysate"),
+    amend_pattern = ifelse(amend_flag, "stripe", "none")
+  ) %>% 
+  select(-w, -w_s) %>% 
+  distinct()
+
+# 1) Collapse treatments to two bins for plotting & stats
+fig2_data_collapsed <- fig2_data_ord %>%
+  mutate(
+    treat_group = case_when(
+      trt_lab %in% c("diatom exudate", "diatom lysate") ~ "amended",
+      TRUE                                              ~ "ambient"
+    )
+  ) %>%
+  group_by(group_fac, exp, date, water_abbr, depth_group,
+           stream, stream_simple, hours_f, x_key_reordered, treat_group) %>%
+  summarise(
+    w      = if_else(is.finite(se_DOC) & se_DOC > 0, 1/(se_DOC^2), NA_real_),
+    w_s    = sum(w, na.rm = TRUE),
+    mean_DOC = if_else(w_s > 0, sum(w * mean_DOC, na.rm = TRUE) / w_s,
+                       mean(mean_DOC, na.rm = TRUE)),
+    se_DOC = if_else(w_s > 0, sqrt(1 / w_s),
+                     sd(mean_DOC, na.rm = TRUE) / sqrt(dplyr::n())),
+    n_units = sum(n_units, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 2) Rebuild short x-labels just once per x-key
+x_lab_map <- fig2_data_collapsed %>%
+  distinct(x_key_reordered, exp) %>%
+  mutate(short = gsub("^BR", "", exp)) %>%
+  { setNames(.$short, .$x_key_reordered) }
+short_x_lab <- function(vals) unname(x_lab_map[as.character(vals)])
+
+# 3) Palettes
+eff_cols <- c(
+  "effluent.surface" = "#56B4E9",  # blue
+  "effluent.75 m"    = "#009E73",  # green
+  "effluent.200 m"   = "#E69F00"   # orange
+)
+influent_cols <- c(
+  "influent.surface" = "grey80",
+  "influent.75 m"    = "grey60",
+  "influent.200 m"   = "grey40"
+)
+fill_vals <- c(influent_cols, eff_cols)
+
+fill_labs <- c(
+  "influent.surface" = "Influent (surface)",
+  "influent.75 m"    = "Influent (75 m)",
+  "influent.200 m"   = "Influent (200 m)",
+  "effluent.surface" = "Effluent (surface)",
+  "effluent.75 m"    = "Effluent (75 m)",
+  "effluent.200 m"   = "Effluent (200 m)"
+)
+
+# 4) Shared dodge
+pd <- position_dodge2(width = 0.72, preserve = "single")
+
+# 5) Core plot with hashed pattern for "amended"
+fig2_core <- ggplot(
+  fig2_data_collapsed,
+  aes(
+    x = x_key_reordered, y = mean_DOC,
+    fill  = interaction(stream_simple, depth_group),
+    group = interaction(stream_simple, depth_group, treat_group),   # <- dodge groups
+    pattern = ifelse(treat_group == "amended", "stripe", "none")    # <- hashed for amendments
+  )
+) +
+  ggpattern::geom_col_pattern(
+    position = pd, width = 0.75, color = "black",
+    pattern_fill    = NA,
+    pattern_colour  = "black",
+    pattern_density = 0.35,
+    pattern_spacing = 0.03,
+    pattern_angle   = 45
+  ) +
+  geom_errorbar(
+    aes(ymin = mean_DOC - se_DOC, ymax = mean_DOC + se_DOC),
+    position = pd, width = 0.18
+  ) +
+  facet_wrap(~ group_fac, ncol = 1, scales = "fixed") +
+  coord_cartesian(ylim = c(y_min, y_max)) +
+  scale_x_discrete(labels = short_x_lab) +
+  scale_fill_manual(values = fill_vals, labels = fill_labs, name = "Stream × depth") +
+  scale_pattern_manual(
+    values = c("none" = "none", "stripe" = "stripe"),
+    labels = c("none" = "no amendment", "stripe" = "amendment"),
+    name = "Treatment"
+  ) +
+  labs(
+    x = NULL, y = expression("DOC (" * mu * "mol C L"^{-1} * ")")
+  ) +
+  theme_bw(base_size = 11) +
+  theme(
+    legend.position = "top",
+    legend.box = "vertical",
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(vjust = 0.9, hjust = 0.5, lineheight = 0.95),
+    panel.grid.minor = element_blank()
+  )
+
+# 6) Recompute ΔDOC stats on the collapsed groups (effluent 4 h/7 h vs influent 0 h)
+# Keep hour in the collapsed stats
+eff_4_7h_collapsed <- fig2_data_collapsed %>%
+  dplyr::filter(hours_f %in% c("4 h", "7 h"), stream_simple == "effluent") %>%
+  dplyr::transmute(
+    group_fac, exp, date, water_abbr, depth_group, treat_group,
+    x_key_reordered,
+    hours_f,                         # <-- keep hour
+    mean_DOC_eff = mean_DOC,
+    se_DOC_eff   = se_DOC,
+    n_reactors   = n_units
+  )
+
+infl_0h_collapsed <- fig2_data_collapsed %>%
+  dplyr::filter(hours_f == "0 h", stream_simple == "influent") %>%
+  dplyr::transmute(
+    exp, date, water_abbr, depth_group, treat_group,
+    mean_DOC_infl0h = mean_DOC,
+    se_DOC_infl0h   = se_DOC
+  )
+
+stats_data_collapsed <- eff_4_7h_collapsed %>%
+  dplyr::left_join(
+    infl_0h_collapsed,
+    by = c("exp","date","water_abbr","depth_group","treat_group")
+  ) %>%
+  dplyr::filter(is.finite(mean_DOC_eff), is.finite(mean_DOC_infl0h)) %>%
+  dplyr::mutate(
+    delta_DOC = mean_DOC_eff - mean_DOC_infl0h,
+    se_delta  = dplyr::if_else(
+      is.finite(se_DOC_eff) & is.finite(se_DOC_infl0h),
+      sqrt(se_DOC_eff^2 + se_DOC_infl0h^2), NA_real_
+    ),
+    z_value   = dplyr::if_else(is.finite(se_delta) & se_delta > 0, delta_DOC / se_delta, NA_real_),
+    p_value   = dplyr::if_else(is.finite(z_value), 2 * pnorm(-abs(z_value)), NA_real_),
+    sig_star  = (delta_DOC <= -1.5) & (is.na(p_value) | p_value < 0.05),
+    label_text = dplyr::if_else(!is.na(n_reactors) & n_reactors > 1,
+                                sprintf("%.1f (n=%d)", delta_DOC, n_reactors),
+                                sprintf("%.1f", delta_DOC))
+
+  )
+
+stats_data_collapsed <- stats_data_collapsed %>%
+  dplyr::mutate(
+    # Positive values = % decrease from influent to effluent
+    pct_decrease = dplyr::if_else(
+      is.finite(mean_DOC_infl0h) & mean_DOC_infl0h > 0,
+      -100 * delta_DOC / mean_DOC_infl0h,  # delta_DOC = eff - infl
+      NA_real_
+    ),
+    pct_decrease_str = scales::percent(pct_decrease / 100, accuracy = 0.1)
+  )
+
+# 7) Labels: keep aligned with dodged bars (no nudge_x/y to avoid errors)
+fig2 <- fig2_core +
+  ggrepel::geom_text_repel(
+    data = stats_data_collapsed,
+    aes(
+      x = x_key_reordered,
+      y = mean_DOC_eff + coalesce(se_DOC_eff, 0) + 0.05 * (y_max - y_min),
+      label = label_text,
+      group = interaction("effluent", depth_group, treat_group)
+    ),
+    inherit.aes = FALSE,
+    position = pd,
+    direction = "y",
+    min.segment.length = 0,
+    segment.size = 0.3,
+    box.padding = 0.15,
+    point.padding = 0.1,
+    max.overlaps = Inf,
+    size = 3.5
+  ) +
+  geom_text(
+    data = dplyr::filter(stats_data_collapsed, sig_star),
+    aes(
+      x = x_key_reordered,
+      y = mean_DOC_eff + coalesce(se_DOC_eff, 0) + 0.10 * (y_max - y_min),
+      label = "*",
+      group = interaction("effluent", depth_group, treat_group)
+    ),
+    inherit.aes = FALSE,
+    position = pd,
+    size = 5
+  ) +
+  theme(axis.text.x = element_text(angle = 45),               
+      plot.margin = margin(6, 14, 6, 14))
+
+fig2
+```
+
+```{r}
+# Final table (one row per 4 h / 7 h)
+table_Fig2_delta <- stats_data_collapsed %>%
+  dplyr::transmute(
+    group        = group_fac,
+    exp,
+    date         = as.Date(date),
+    water        = water_abbr,
+    depth        = depth_group,
+    treatment    = treat_group,   # "ambient" or "amended"
+    hour         = hours_f,       # "4 h" or "7 h"
+    stream       = "effluent",
+    mean_effluent   = mean_DOC_eff,
+    se_effluent     = se_DOC_eff,
+    mean_influent0h = mean_DOC_infl0h,
+    se_influent0h   = se_DOC_infl0h,
+    delta_DOC,
+    se_delta,
+    z_value,
+    p_value,
+    sig_flag     = sig_star,
+    n_reactors,
+    pct_decrease,
+    pct_decrease_str
+  ) %>%
+  dplyr::arrange(group, dplyr::desc(date), exp, water, depth, treatment, hour)
+```
+
+```{r}
+range_abs_removal <- table_Fig2_delta %>%
+  filter(group == "Post-conditioning") %>%
+  summarise(
+    min_delta = round(min(-delta_DOC, na.rm = TRUE), 2),  # ΔDOC = eff - infl, so negate
+    max_delta = round(max(-delta_DOC, na.rm = TRUE), 2),
+    mean_dealta = round(mean(-delta_DOC, na.rm = TRUE), 2),
+    sd_dealta = round(sd(-delta_DOC, na.rm = TRUE), 2)
+  )
+range_abs_removal
+```
+```{r}
+avg_pct_removal <- table_Fig2_delta %>%
+  filter(group == "Post-conditioning") %>%
+  summarise(
+    mean_pct = round(mean(pct_decrease, na.rm = TRUE), 1),
+    se_pct   = round(sd(pct_decrease, na.rm = TRUE) / sqrt(n()), 1),
+    n        = n()
+  )
+avg_pct_removal
+```
+
+```{r}
+# Prep: one row per run
+removal_vs_infl <- table_Fig2_delta %>%
+  filter(group == "Post-conditioning") %>%
+  mutate(abs_removal = -delta_DOC) %>%  # eff - infl → make positive removal
+  select(exp, date, water, depth, treatment, hour,
+         mean_influent0h, abs_removal, pct_decrease)
+
+# Linear regressions
+lm_abs  <- lm(abs_removal ~ mean_influent0h, data = removal_vs_infl)
+lm_pct  <- lm(pct_decrease ~ mean_influent0h, data = removal_vs_infl)
+
+summary(lm_abs)
+summary(lm_pct)
+
+```
+
+
+```{r}
+# =========================================
+# SI Figure S2 — BR15-1 with beads included
+# =========================================
+
+# Aggregate (IVW) per date × treatment × bead × stream × hour + bioreactor count
+s2_data <- df1 %>%
+  filter(exp == "BR15-1") %>%
+  group_by(exp, date, water_lab, trt_lab, beads, stream_simple, hours_elapsed) %>%
+  summarise(
+    w        = if_else(is.finite(se_doc) & se_doc > 0, 1/(se_doc^2), NA_real_),
+    w_s      = sum(w, na.rm = TRUE),
+    mean_DOC = if_else(w_s > 0, sum(w * mean_doc, na.rm = TRUE)/w_s,
+                       mean(mean_doc, na.rm = TRUE)),
+    se_DOC   = if_else(w_s > 0, sqrt(1/w_s),
+                       sd(mean_doc, na.rm = TRUE)/sqrt(dplyr::n())),
+    n_units  = dplyr::n_distinct(bioreactor),
+    .groups  = "drop"
+  ) %>%
+  mutate(
+    exp_date = paste0(exp, " (", format(date, "%Y-%m-%d"), ")"),
+    hours_f  = paste0(hours_elapsed, " h"),
+    stream_simple = factor(stream_simple, levels = c("influent","effluent")),
+    trt_lab = factor(trt_lab,
+                          levels = c("flow-thru",
+                                     "diatom exudate",
+                                     "diatom lysate")),
+    x_key    = interaction(format(date, "%Y-%m-%d"), beads, hours_f,
+                           drop = TRUE, lex.order = TRUE)
+  ) %>% 
+  select(-w, -w_s) %>% 
+  distinct()
+
+
+# --- expand influent rows to match beads present in effluent for each date × trt ---
+bead_map <- s2_data %>%
+  filter(stream_simple == "effluent") %>%
+  distinct(date, trt_lab, beads)
+
+infl_rows <- s2_data %>%
+  filter(stream_simple == "influent") %>%
+  select(exp, date, water_lab, trt_lab, stream_simple, hours_elapsed,
+         mean_DOC, se_DOC, n_units, exp_date, hours_f) %>%
+  left_join(bead_map, by = c("date","trt_lab"))   # duplicates influent per bead
+
+# effluent rows
+eff_rows <- s2_data %>%
+  filter(stream_simple == "effluent")
+
+# replace s2_data with expanded version (influent duplicated per bead type)
+s2_data <- bind_rows(infl_rows, eff_rows) %>%
+  mutate(
+    # rebuild x_key now that influent has beads
+    x_key = interaction(format(date, "%Y-%m-%d"), beads, hours_f,
+                        drop = TRUE, lex.order = TRUE)
+  )
+
+# Influent baseline at 0 h (per date × trt), no bead key (same water for all beads)
+s2_infl0 <- s2_data %>%
+  filter(stream_simple == "influent", hours_elapsed == 0) %>%
+  distinct(date, trt_lab, mean_DOC_infl0 = mean_DOC, se_DOC_infl0 = se_DOC)
+
+# ΔDOC for each effluent hour vs 0 h influent (per date × trt × beads)
+s2_stats <- s2_data %>%
+  filter(stream_simple == "effluent") %>%
+  left_join(s2_infl0, by = c("date","trt_lab")) %>%
+  mutate(
+    delta_DOC = mean_DOC - mean_DOC_infl0,
+    se_delta  = ifelse(is.finite(se_DOC) & is.finite(se_DOC_infl0),
+                       sqrt(se_DOC^2 + se_DOC_infl0^2), NA_real_),
+    z_value   = ifelse(is.finite(se_delta) & se_delta > 0, delta_DOC / se_delta, NA_real_),
+    p_value   = ifelse(is.finite(z_value), 2*pnorm(-abs(z_value)), NA_real_),
+    sig_star  = (abs(delta_DOC) >= 1.5) & (is.na(p_value) | p_value < 0.05),
+    label_text = ifelse(n_units > 1,
+                        sprintf("%.1f (n=%d)", delta_DOC, n_units),
+                        sprintf("%.1f", delta_DOC)),
+    y_offset  = 0.02 * (y_max - y_min),
+    trt_lab = factor(trt_lab,
+                          levels = c("flow-thru",
+                                     "diatom exudate",
+                                     "diatom lysate"))
+  )
+
+# Effluent only, hours of interest
+s2_eff <- s2_data %>%
+  filter(stream_simple == "effluent", hours_elapsed %in% c(3,4,5,6)) %>%
+  select(date, trt_lab, beads, hours_elapsed, mean_DOC, se_DOC)
+
+# Pairwise comparisons: (3 vs 4), (4 vs 5), (4 vs 6)
+stability_pairs <- tibble(
+  hour1 = c(3,4,4),
+  hour2 = c(4,5,6)
+)
+
+s2_eff_pairs <- s2_eff %>%
+  right_join(stability_pairs, by = character()) %>%   # add desired comparisons
+  group_by(date, trt_lab, beads, hour1, hour2) %>%
+  summarise(
+    mean1 = mean(mean_DOC[hours_elapsed == hour1], na.rm = TRUE),
+    mean2 = mean(mean_DOC[hours_elapsed == hour2], na.rm = TRUE),
+    se1   = mean(se_DOC[hours_elapsed == hour1], na.rm = TRUE),
+    se2   = mean(se_DOC[hours_elapsed == hour2], na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    delta12  = mean2 - mean1,
+    se_delta = sqrt(se1^2 + se2^2),
+    z_val    = delta12 / se_delta,
+    p_val    = 2*pnorm(-abs(z_val)),
+    sig_flag = (abs(delta12) >= 1.5) & (is.na(p_val) | p_val < 0.05)
+  )
+
+# ----- Plot (bars with beads separated) -----
+fmt_s2_x <- function(vals){
+  sapply(as.character(vals), function(v){
+    parts <- strsplit(v, "\\.")[[1]] # "YYYY-mm-dd.beads.hour"
+    paste0(parts[2]," · ", parts[3])
+  })
+}
+
+s2 <- ggplot(s2_data, aes(x = x_key, y = mean_DOC, fill = stream_simple)) + 
+  geom_col(
+  position = position_dodge(width = 0.7),
+  width = 0.64,
+  color = "black"
+) + 
+  geom_errorbar(
+  aes(ymin = mean_DOC - se_DOC, ymax = mean_DOC + se_DOC),
+  position = position_dodge(width = 0.7),
+  width = 0.18
+) + 
+  facet_wrap( ~ trt_lab, ncol = 1, scales = "free") + 
+  # coord_cartesian(ylim = c(y_min, y_max)) +
+  coord_cartesian(ylim = c(53, 73)) +
+  scale_x_discrete(labels = fmt_s2_x) + 
+  scale_fill_manual(values = c(
+  "influent" = alpha("grey60", 0.8),
+  "effluent" = "#56B4E9" 
+),
+name = "Stream") +
+  labs(
+  x = NULL,
+  y = expression("DOC (" * mu * "mol C L"^{-1} * ")")   # clean superscript
+  ) + 
+  theme_bw(base_size = 11) + theme(
+  legend.position = "top",
+  strip.background = element_rect(fill = "white"),
+  strip.text = element_text(face = "bold"),
+  axis.text.x = element_text(
+    angle = 0,
+    vjust = 0.9,
+    hjust = 0.5,
+    lineheight = 0.95
+  )
+) + geom_text(
+  data = s2_stats,
+  aes(
+    x = x_key,
+    y = mean_DOC + coalesce(se_DOC, 0) + y_offset,
+    label = label_text
+  ),
+  inherit.aes = FALSE,
+  color = "black",
+  size = 3.5,
+  vjust = -0.2
+) + geom_text(
+  data = s2_stats %>% filter(sig_star),
+  aes(x = x_key, y = mean_DOC + coalesce(se_DOC, 0) + y_offset),
+  label = "*",
+  inherit.aes = FALSE,
+  color = "black",
+  size = 5,
+  vjust = -1.2
+)
+
+
+# Show updated S2
+s2
+
+# Also inspect the focused stability tests
+s2_eff_pairs
+
+```
+
+```{r}
+s2_data_alt <- s2_data %>% 
+  select(exp:se_DOC, beads) %>% 
+  distinct()
+
+ bead_cols <- c(
+  "homogenous" = "#009E73",  # 1 mm
+  "mixed"      = "#E69F00"   # 1 + 4 mm
+)
+
+s2_alt <- ggplot(s2_data_alt, aes(x = hours_elapsed, y = mean_DOC, color = beads, fill = beads, group = interaction(trt_lab, beads))) +
+  geom_line() +
+  geom_errorbar(
+  aes(ymin = mean_DOC - se_DOC, ymax = mean_DOC + se_DOC),
+  # position = position_dodge(width = 0.7),
+  width = 0.18
+) +
+  geom_point(shape = 21, color = "black") +
+  geom_text(
+  data = s2_stats,
+  aes(
+    x = hours_elapsed,
+    y = mean_DOC + coalesce(se_DOC, 0) + y_offset,
+    label = label_text
+  ),
+  inherit.aes = FALSE,
+  color = "black",
+  size = 3.5,
+  vjust = -0.2
+) + geom_text(
+  data = s2_stats %>% filter(sig_star),
+  aes(x = hours_elapsed, y = mean_DOC + coalesce(se_DOC, 0) + y_offset),
+  label = "*",
+  inherit.aes = FALSE,
+  color = "black",
+  size = 5,
+  vjust = -1.2
+) +
+  facet_wrap( ~ trt_lab, ncol = 1, scales = "free") +
+  scale_color_manual(values = bead_cols,
+                     labels = c("homogenous" = "Homogenous (1 mm)",
+                                "mixed"      = "Mixed (1 + 4 mm)")) +
+  scale_fill_manual(values = bead_cols,
+                     labels = c("homogenous" = "Homogenous (1 mm)",
+                                "mixed"      = "Mixed (1 + 4 mm)")) +
+  labs(
+  x = NULL,
+  y = expression("DOC (" * mu * "mol C L"^{-1} * ")")   # clean superscript
+  ) + 
+  theme_bw(base_size = 11) + 
+  theme(
+  legend.position = "top",
+  strip.background = element_rect(fill = "white"),
+  strip.text = element_text(face = "bold"),
+  axis.text.x = element_text(
+    angle = 0,
+    vjust = 0.9,
+    hjust = 0.5,
+    lineheight = 0.95
+  ))
+  
+ 
+```
+
+
+
+```{r}
+# =========================================
+#  Stats Tables
+# =========================================
+
+# ---- SI S2: effluent vs influent deltas per hour
+table_S2_delta <- s2_stats %>%
+  transmute(
+    date = as.Date(date),
+    treatment = trt_lab,
+    hour = hours_f,
+    stream = "effluent",
+    mean_effluent   = mean_DOC,
+    se_effluent     = se_DOC,
+    mean_influent0h = mean_DOC_infl0,
+    se_influent0h   = se_DOC_infl0,
+    delta_DOC,
+    se_delta,
+    z_value,
+    p_value,
+    sig_flag = sig_star,
+    n_reactors = n_units
+  ) %>%
+  arrange(date, treatment, hour)
+
+# ---- SI S2: pairwise effluent vs effluent comparisons within date × treatment
+s2_eff <- s2_data %>%
+  filter(stream_simple == "effluent") %>%
+  select(date, trt_lab, hours_elapsed, mean_DOC, se_DOC) %>%
+  distinct()
+
+table_S2_eff_pairwise <- s2_eff %>%
+  group_by(date, trt_lab) %>%
+  tidyr::expand(hour1 = hours_elapsed, hour2 = hours_elapsed) %>%
+  filter(hour2 > hour1) %>%
+  left_join(s2_eff %>% rename(mean1 = mean_DOC, se1 = se_DOC, hours_elapsed = hours_elapsed),
+            by = c("date","trt_lab","hour1" = "hours_elapsed")) %>%
+  left_join(s2_eff %>% rename(mean2 = mean_DOC, se2 = se_DOC, hours_elapsed = hours_elapsed),
+            by = c("date","trt_lab","hour2" = "hours_elapsed")) %>%
+  mutate(
+    delta12  = mean2 - mean1,
+    se_delta = ifelse(is.finite(se1) & is.finite(se2), sqrt(se1^2 + se2^2), NA_real_),
+    z_val    = ifelse(is.finite(se_delta) & se_delta > 0, delta12 / se_delta, NA_real_),
+    p_val    = ifelse(is.finite(z_val), 2*pnorm(-abs(z_val)), NA_real_),
+    sig_flag = (abs(delta12) >= 1.5) & (is.na(p_val) | p_val < 0.05)
+  ) %>%
+  arrange(date, trt_lab, hour1, hour2) %>%
+  ungroup()
+
+# ---- Preview a few rows
+head(table_Fig1_delta, 12)
+head(table_S2_delta, 12)
+head(table_S2_eff_pairwise, 12)
+
+
+```
+
+```{r}
+# =========================================
+# SI Figure S3 — Bead pack comparison (BR15-1..BR15-11)
+# Removal = Influent(0 h) − Effluent(4 h), IVW per run
+# Uses `beads` column: "homogenous" or "mixed"
+# =========================================
+
+# Safety: ensure column exists and standardize levels just in case
+stopifnot("beads" %in% names(df))
+df0 <- df0 %>%
+  mutate(
+    beads = tolower(trimws(beads)),
+    beads = dplyr::recode(beads,
+                          "homogeneous" = "homogenous",  #
+                          "mixed 1+4mm" = "mixed",
+                          .default = beads),
+    beads = factor(beads, levels = c("homogenous","mixed"))
+  )
+
+# Rebuild df1 so `beads` flows through
+df1 <- df0 %>%
+  left_join(single_stage_per_run, by = c("exp","date","water_lab","trt_lab")) %>%
+  filter(stage == 0 | stage == single_stage) %>%
+  mutate(
+    stream        = if_else(stage == 0, "influent", paste0("stage ", single_stage)),
+    stream_simple = if_else(stage == 0, "influent", "effluent")
+  )
+
+# Restrict to BR15-1 .. BR15-11, compare 0h vs 4h single column
+exp_15 <- paste0("BR15-", 1:11)
+
+s3_base <- df1 %>%
+  filter(exp %in% exp_15, hours_elapsed %in% c(0,4)) %>%
+  mutate(
+    water_abbr = recode(water_lab,
+                        "UCSB intake"="UCSB","Goleta Pier"="Goleta",
+                        "Stearns Wharf"="Stearns","SBC"="SBC",
+                        .default = water_lab)
+  )
+
+# IVW aggregation within (exp,date,water,trt,beads,stream,hour)
+s3_agg <- s3_base %>%
+  group_by(exp, date, water_abbr, trt_lab, beads, stream_simple, hours_elapsed) %>%
+  summarise(
+    w        = if_else(is.finite(se_doc) & se_doc > 0, 1/(se_doc^2), NA_real_),
+    w_s      = sum(w, na.rm = TRUE),
+    mean_DOC = if_else(w_s > 0, sum(w * mean_doc, na.rm = TRUE)/w_s,
+                       mean(mean_doc, na.rm = TRUE)),
+    se_DOC   = if_else(w_s > 0, sqrt(1/w_s),
+                       sd(mean_doc, na.rm = TRUE)/sqrt(dplyr::n())),
+    n_units  = dplyr::n_distinct(bioreactor),
+    flowrate_mean = mean(flowrate, na.rm = TRUE),
+    .groups  = "drop"
+  )
+
+# Per-run components: Influent 0h and Effluent 4h
+s3_infl0 <- s3_agg %>%
+  filter(stream_simple == "influent", hours_elapsed == 0) %>%
+  select(exp, date, water_abbr, trt_lab, 
+         infl_DOC0 = mean_DOC, infl_SE0 = se_DOC) 
+
+s3_eff4 <- s3_agg %>%
+  filter(stream_simple == "effluent", hours_elapsed == 4) %>%
+  select(exp, date, water_abbr, trt_lab, beads, n_units, flowrate_mean,
+         eff_DOC4 = mean_DOC, eff_SE4 = se_DOC) %>% 
+  distinct()
+
+# Join & compute removal metrics
+table_S3_runs <- s3_eff4 %>%
+  left_join(s3_infl0, by = c("exp","date","water_abbr","trt_lab")) %>%
+  filter(is.finite(infl_DOC0), is.finite(eff_DOC4)) %>%
+  mutate(
+    removal_DOC = infl_DOC0 - eff_DOC4,                 # positive = removal
+    delta_DOC   = eff_DOC4 - infl_DOC0,                 # negative = removal (for reference)
+    se_removal  = ifelse(is.finite(infl_SE0) & is.finite(eff_SE4),
+                         sqrt(infl_SE0^2 + eff_SE4^2), NA_real_),
+    z_value     = ifelse(is.finite(se_removal) & se_removal > 0, removal_DOC / se_removal, NA_real_),
+    p_value     = ifelse(is.finite(z_value), 2*pnorm(-abs(z_value)), NA_real_),
+    dl_flag     = (removal_DOC >= 1.5),                 # ≥ detection limit in removal direction
+    sig_flag    = dl_flag & (is.na(p_value) | p_value < 0.05)
+  ) %>%
+  arrange(date, exp, water_abbr, trt_lab)
+
+# Regression: removal ~ beads * infl_DOC0  (interaction)
+mod_S3 <- lm(removal_DOC ~ beads * infl_DOC0, data = table_S3_runs)
+
+table_S3_lm_coefs <- broom::tidy(mod_S3, conf.int = TRUE)
+table_S3_anova    <- broom::anova(mod_S3)  # Type I; for Type II use car::Anova(mod_S3, type=2)
+
+# Group-wise slopes from interaction model
+coefs <- broom::tidy(mod_S3) |> select(term, estimate)
+b0  <- coefs$estimate[coefs$term == "(Intercept)"]
+bb  <- coefs$estimate[coefs$term == "beadsmixed"]
+bi  <- coefs$estimate[coefs$term == "infl_DOC0"]
+bix <- coefs$estimate[coefs$term == "beadsmixed:infl_DOC0"]
+
+table_S3_group_slopes <- tibble::tibble(
+  beads       = c("homogenous","mixed"),
+  intercept   = c(b0, b0 + bb),
+  slope_infl  = c(bi, bi + bix)
+) %>%
+  left_join(
+    broom::tidy(mod_S3) %>%
+      filter(term %in% c("infl_DOC0","beadsmixed:infl_DOC0")) %>%
+      transmute(
+        beads   = if_else(term == "infl_DOC0","homogenous","mixed"),
+        slope_p = p.value
+      ),
+    by = "beads"
+  )
+
+# Colorblind-safe pair: green & orange
+bead_cols <- c(
+  "homogenous" = "#009E73",  # 1 mm
+  "mixed"      = "#E69F00"   # 1 + 4 mm
+)
+
+s3_plot <- ggplot(table_S3_runs,
+                  aes(x = infl_DOC0, y = removal_DOC)) +
+  # zero line
+  geom_hline(yintercept = 0, linewidth = 0.4, color = "grey70") +
+  # points: one shape with black outline, fill by beads
+  geom_point(aes(fill = beads),
+             shape = 21, color = "black", stroke = 0.5, size = 3.2, alpha = 0.9) +
+  # OLS fits by group with colored ribbon
+  geom_smooth(aes(color = beads, fill = beads),
+              method = "lm", se = TRUE, fullrange = TRUE,
+              linewidth = 0.9, alpha = 0.18) +
+  # scales
+  scale_fill_manual(values = bead_cols, name = "Bead configuration",
+                    labels = c("homogenous" = "Homogenous (1 mm)",
+                               "mixed"      = "Mixed (1 + 4 mm)")) +
+  scale_color_manual(values = bead_cols, name = "Bead configuration",
+                     labels = c("homogenous" = "Homogenous (1 mm)",
+                                "mixed"      = "Mixed (1 + 4 mm)")) +
+  # labels
+  labs(
+    x = expression("Initial influent DOC (" * mu * "mol C L"^{-1} * ")"),
+    y = expression("DOC removal (" * mu * "mol C L"^{-1} * ")"),
+    caption = "Points are IVW run means; lines are OLS fits with 95% CI."
+  ) +
+  # theme
+  theme_bw(base_size = 11) +
+  theme(
+    legend.position  = "top",
+    legend.title     = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+
+```
+
+```{r}
+# ======================================================
+# Figure S3 – Rebuild regression tables 
+# Requires: table_S3_runs
+# ======================================================
+
+# 0) Guard: make sure run-level data exist
+if (!exists("table_S3_runs")) {
+  stop("table_S3_runs not found. Run the S3 data-aggregation chunk first.")
+}
+
+# 1) Fit (or refit) the interaction model if missing
+if (!exists("mod_S3")) {
+  mod_S3 <- lm(removal_DOC ~ beads * infl_DOC0, data = table_S3_runs)
+}
+
+# 2) Full regression coefficients (with CIs)
+table_S3_lm_coefs <- broom::tidy(mod_S3, conf.int = TRUE) %>%
+  transmute(
+    term,
+    estimate  = round(estimate, 3),
+    std_error = round(std.error, 3),
+    conf_low  = round(conf.low, 3),
+    conf_high = round(conf.high, 3),
+    p_value   = signif(p.value, 3)
+  )
+
+# 3) ANOVA (Type I). For Type II, use: car::Anova(mod_S3, type = 2)
+anova_raw <- stats::anova(mod_S3)             # base R anova.lm
+anova_df  <- as.data.frame(anova_raw)
+anova_df$term <- rownames(anova_df)
+rownames(anova_df) <- NULL
+
+table_S3_anova <- anova_df %>%
+  select(term, df = Df, `Sum Sq`, `Mean Sq`, `F value`, `Pr(>F)`) %>%
+  rename(sumsq = `Sum Sq`, meansq = `Mean Sq`, f_value = `F value`, p_value = `Pr(>F)`) %>%
+  mutate(
+    sumsq   = round(sumsq, 2),
+    meansq  = round(meansq, 2),
+    f_value = round(f_value, 2),
+    p_value = signif(p_value, 3)
+  )
+
+# 4) Group-wise slopes & intercepts from the interaction model
+coefs <- broom::tidy(mod_S3) %>% select(term, estimate)
+b0  <- coefs$estimate[coefs$term == "(Intercept)"]
+bb  <- coefs$estimate[coefs$term == "beadsmixed"]
+bi  <- coefs$estimate[coefs$term == "infl_DOC0"]
+bix <- coefs$estimate[coefs$term == "beadsmixed:infl_DOC0"]
+
+table_S3_group_slopes <- tibble::tibble(
+  beads       = c("homogenous","mixed"),
+  intercept   = c(b0, b0 + bb),
+  slope_infl  = c(bi, bi + bix)
+) %>%
+  left_join(
+    broom::tidy(mod_S3) %>%
+      filter(term %in% c("infl_DOC0","beadsmixed:infl_DOC0")) %>%
+      transmute(
+        beads   = if_else(term == "infl_DOC0", "homogenous", "mixed"),
+        slope_p = p.value
+      ),
+    by = "beads"
+  ) %>%
+  mutate(
+    intercept  = round(intercept, 2),
+    slope_infl = round(slope_infl, 3),
+    slope_p    = signif(slope_p, 3)
+  )
+
+# 5) Preview 
+table_S3_group_slopes
+table_S3_lm_coefs
+table_S3_anova
+
+```
+

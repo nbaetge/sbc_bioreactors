@@ -1,0 +1,169 @@
+---
+title: "SBC Bioreactors O2 Tracer"
+author: "Nicholas Baetge"
+date: "Last compiled on `r format(Sys.time(), '%d %B, %Y')`"
+output: github_document
+---
+
+
+```{r load packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(lubridate)
+library(zoo)
+```
+
+```{r}
+data <- readxl::read_excel(path = "~/github/sbc_bioreactors/data/o2_tracer_data.xlsx") %>% 
+  mutate(dt = ymd_hms(paste(date, hms)), .after = bioreactor) %>% 
+  select(bioreactor, beads, dt, o2, stage) 
+```
+
+
+```{r}
+# low-O2 start times (min since start of high-pulse stage)
+low_o2_starts <- tibble(
+  bioreactor = c("1_2", "3_4", "5_6", "7_8"),
+  start_min  = c(26, 13, 17, 23)
+)
+
+# filter to tracer window
+data_window <- data %>%
+  filter(stage == "high_pulse", bioreactor %in% low_o2_starts$bioreactor) %>%
+  arrange(bioreactor, dt) %>%
+  group_by(bioreactor) %>%
+  mutate(elapsed_min = as.numeric(difftime(dt, min(dt), units = "mins"))) %>%
+  left_join(low_o2_starts, by = "bioreactor") %>%
+  filter(elapsed_min >= start_min) %>%
+  ungroup() %>%
+  group_by(bioreactor, beads) %>%
+  mutate(o2_smooth = zoo::rollmean(o2, k = 3, fill = NA, align = "center")) %>%
+  ungroup()
+
+```
+
+```{r}
+# thresholds
+base_s <- data_window %>%
+  group_by(bioreactor, beads) %>%
+  summarise(
+    o2_low  = min(o2_smooth, na.rm = TRUE),
+    o2_high = max(o2_smooth, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    span = o2_high - o2_low,
+    thresh_10 = o2_low + 0.10 * span,
+    thresh_90 = o2_low + 0.90 * span
+  )
+
+
+# find T10 and T90  (join by BOTH bioreactor and beads)
+t10 <- data_window %>%
+  inner_join(base_s, by = c("bioreactor","beads")) %>%
+  group_by(bioreactor, beads) %>%
+  filter(o2_smooth >= thresh_10) %>%
+  slice(1) %>%
+  transmute(bioreactor, beads, dt10 = dt)
+
+t90 <- data_window %>%
+  inner_join(base_s, by = c("bioreactor","beads")) %>%
+  group_by(bioreactor, beads) %>%
+  filter(o2_smooth >= thresh_90) %>%
+  slice(1) %>%
+  transmute(bioreactor, beads, dt90 = dt)
+
+# residence time table (beads carried through)
+res_times <- t10 %>%
+  inner_join(t90, by = c("bioreactor","beads")) %>%
+  left_join(
+    data_window %>%
+      group_by(bioreactor) %>%                 # start per reactor is fine since bead type is fixed per bioreactor
+      summarise(start_dt = min(dt), .groups = "drop"),
+    by = "bioreactor"
+  ) %>%
+  mutate(
+    t10_min      = as.numeric(difftime(dt10, start_dt, units = "mins")),
+    t90_min      = as.numeric(difftime(dt90, start_dt, units = "mins")),
+    res_time_min = as.numeric(difftime(dt90, dt10,  units = "mins"))
+  ) %>%
+  select(bioreactor, beads, dt10, dt90, t10_min, t90_min, res_time_min) %>%
+  arrange(bioreactor)
+
+res_times
+```
+
+
+```{r fig.height=8, fig.width=10}
+
+bead_cols <- c(
+  "homogenous" = "#009E73",  # 1 mm
+  "mixed"      = "#E69F00"   # 1 + 4 mm
+)
+
+# Prep: per-bioreactor, per-bead thresholds + event times for lines/points
+thr_lines <- base_s %>%
+  dplyr::left_join(res_times %>% dplyr::select(bioreactor, beads, t10_min, t90_min),
+                   by = c("bioreactor","beads"))
+
+event_pts <- dplyr::bind_rows(
+  thr_lines %>% dplyr::transmute(bioreactor, beads, x = t10_min, y = thresh_10, event = "T10"),
+  thr_lines %>% dplyr::transmute(bioreactor, beads, x = t90_min, y = thresh_90, event = "T90")
+)
+
+# Pretty facet labels
+bio_lab <- as_labeller(c(
+  "1_2" = "Columns 1+2",
+  "3_4" = "Columns 3+4",
+  "5_6" = "Columns 5+6",
+  "7_8" = "Columns 7+8"
+))
+
+# Plot (use smoothed O2 if available; fall back to raw)
+s1 <- ggplot(plot_data, aes(x = elapsed_min)) +
+  # main lines (color by beads)
+  geom_line(aes(y = ifelse(is.finite(o2_smooth), o2_smooth, o2), color = beads),
+            linewidth = 0.8, alpha = 0.95, na.rm = TRUE) +
+  # T10/T90 horizontal thresholds per bead (subtle, matching color)
+  geom_hline(data = thr_lines,
+             aes(yintercept = thresh_10, color = beads),
+             linetype = "dashed", linewidth = 0.6, alpha = 0.35, show.legend = FALSE) +
+  geom_hline(data = thr_lines,
+             aes(yintercept = thresh_90, color = beads),
+             linetype = "dashed", linewidth = 0.6, alpha = 0.35, show.legend = FALSE) +
+  # T10/T90 vertical lines per bead (same tint)
+  geom_vline(data = thr_lines,
+             aes(xintercept = t10_min, color = beads),
+             linewidth = 0.6, alpha = 0.35, show.legend = FALSE) +
+  geom_vline(data = thr_lines,
+             aes(xintercept = t90_min, color = beads),
+             linewidth = 0.6, alpha = 0.35, show.legend = FALSE) +
+  # Event points at (T10, thresh_10) and (T90, thresh_90) with shape 21 + black outline
+  geom_point(data = event_pts,
+             aes(x = x, y = y, fill = beads),
+             shape = 21, color = "black", stroke = 0.5, size = 3.4, alpha = 0.9) +
+  # Facets + scales
+  facet_wrap(~ bioreactor, scales = "free_x", labeller = bio_lab) +
+  scale_color_manual(values = bead_cols, guide = "none") +  # lines/thresholds (hide legend)
+  scale_fill_manual(values = bead_cols, name = "Bead configuration",
+                    labels = c("homogenous" = "Homogenous (1 mm)",
+                               "mixed"      = "Mixed (1 + 4 mm)")) +
+  # Labels (plotmath for the superscript)
+  labs(
+    x = "Minutes elapsed",
+    y = expression(O[2] * " (" * mu * "mol L"^{-1} * ")")
+  ) +
+  # Theme to match earlier figures
+  theme_bw(base_size = 11) +
+  theme(
+    legend.position  = "top",
+    legend.title     = element_text(face = "bold"),
+    strip.background = element_rect(fill = "white"),
+    strip.text       = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+s1
+
+```
+
+

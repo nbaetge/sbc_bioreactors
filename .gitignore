@@ -47,3 +47,9 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+#user folders and files
+ms_figs/
+deprecated/
+BR16-3_fastq/
+SILVA_SSU_r138_2_2024.RData

@@ -1,0 +1,262 @@
+---
+title: "SBC Bioreactors Serial Configurations"
+author: "Nicholas Baetge"
+date: "Last compiled on `r format(Sys.time(), '%d %B, %Y')`"
+output: github_document
+---
+
+
+```{r}
+# =========================
+# DOC removal in series
+# =========================
+
+# ---- packages ----
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(glue)
+library(scales)
+library(forcats)
+
+# ---- params ----
+data_path <- "~/github/sbc_bioreactors/data/bioreactor_data.xlsx"
+target_exps <- c("BR15-10","BR15-11","BR16-2","BR16-3","BR17-2")
+analytical_threshold <- 1.5   # µmol C L^-1 
+fig_out <- "series_DOC_removal_with_plateau_sig.png"
+csv_out <- "series_DOC_removal_summary.csv"  # set to NULL to skip write
+
+# ---- load & clean ----
+df <- read_excel(data_path, sheet = 1) |>
+  clean_names()
+
+df_sub <- df |>
+  filter(exp %in% target_exps) |>
+  mutate(
+    bioreactor_n  = as.numeric(bioreactor_n),
+    hours_elapsed = as.numeric(hours_elapsed),
+    water         = fct_explicit_na(water, na_level = "unspecified"),
+    # Split BR16-3 into panels by water; others keep their exp as panel label
+    exp_panel     = if_else(exp == "BR16-3", paste(exp, trt, sep = " – "), exp)
+  )
+
+# ---- influent per panel (earliest position-0 sample) ----
+influent <- df_sub |>
+  filter(bioreactor_n == 0) |>
+  group_by(exp_panel) |>
+  slice_min(order_by = hours_elapsed, n = 1, with_ties = FALSE) |>
+  summarise(
+    doc_in = mean(mean_doc, na.rm = TRUE),
+    se_in  = mean(se_doc,  na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# ---- effluent per panel × position (average if multiple entries exist) ----
+effluent <- df_sub |>
+  filter(bioreactor_n > 0) |>
+  group_by(exp_panel, bioreactor_n) |>
+  summarise(
+    mean_doc_eff = mean(mean_doc, na.rm = TRUE),
+    se_eff       = mean(se_doc,  na.rm = TRUE),
+    n_obs        = dplyr::n(),
+    .groups = "drop"
+  )
+
+# ---- ΔDOC, % removed, and propagated analytical SE ----
+delta <- effluent |>
+  left_join(influent, by = "exp_panel") |>
+  mutate(
+    delta_doc   = doc_in - mean_doc_eff,
+    se_delta    = sqrt(se_in^2 + se_eff^2),          # propagated analytical SE
+    pct_removed = 100 * delta_doc / doc_in
+  ) |>
+  arrange(exp_panel, bioreactor_n)
+
+# ---- marginal gain & plateau detection ----
+delta <- delta |>
+  group_by(exp_panel) |>
+  mutate(
+    delta_prev     = dplyr::lag(delta_doc),
+    se_prev        = dplyr::lag(se_delta),
+    marginal_gain  = delta_doc - delta_prev,
+    se_marginal    = sqrt(se_delta^2 + se_prev^2),
+    z_marginal     = marginal_gain / se_marginal,
+    p_marginal     = 2 * (1 - pnorm(abs(z_marginal))),
+    # plateau step: the *step into* position k adds < threshold and is not significant
+    plateau_step   = if_else(
+      !is.na(marginal_gain) &
+        abs(marginal_gain) < analytical_threshold &
+        (is.na(p_marginal) | p_marginal >= 0.05),
+      TRUE, FALSE
+    )
+  ) |>
+  ungroup()
+
+plateau_by_panel <- delta |>
+  filter(plateau_step) |>
+  group_by(exp_panel) |>
+  slice_min(bioreactor_n, with_ties = FALSE) |>
+  ungroup() |>
+  select(exp_panel, plateau_at_pos = bioreactor_n)
+
+# ---- significance labels for step k-1 -> k ----
+delta <- delta |>
+  mutate(sig_label = case_when(
+    !is.na(p_marginal) & p_marginal < 0.001 ~ "***",
+    !is.na(p_marginal) & p_marginal < 0.01  ~ "**",
+    !is.na(p_marginal) & p_marginal < 0.05  ~ "*",
+    TRUE ~ ""
+  ))
+
+# ---- prep for figure ----
+fig_data <- delta |>
+  left_join(plateau_by_panel, by = "exp_panel")
+
+# Facet order 
+facet_levels <- fig_data |>
+  distinct(exp_panel) |>
+  arrange(exp_panel) |>
+  pull(exp_panel)
+
+fig_data <- fig_data |>
+  mutate(exp_panel = factor(exp_panel, levels = facet_levels))
+
+# ---- figure ----
+# --- padding for % labels & stars ---
+pads <- fig_data %>%
+  dplyr::group_by(exp_panel) %>%
+  dplyr::summarise(
+    rng      = diff(range(delta_doc, na.rm = TRUE)),
+    pad_pct  = pmax(0.04 * rng, 0.6),
+    pad_star = pmax(0.10 * rng, 1.2),
+    .groups  = "drop"
+  )
+
+# Build plotting df; precompute the NEGATIVE values & label positions
+fig_plot <- fig_data %>%
+  dplyr::left_join(pads, by = "exp_panel") %>%
+  dplyr::mutate(
+    delta_neg = -delta_doc,                                  # <- flip sign for plotting
+    ymin_neg  = -(delta_doc + se_delta),                     # <- errorbar lower
+    ymax_neg  = -(delta_doc - se_delta),                     # <- errorbar upper
+    y_pct     = -(delta_doc) - se_delta - pad_pct,           # <- % label just below errorbar
+    y_star    = -(delta_doc) - se_delta - pad_star           # <- stars a bit lower
+  )
+
+# bead-linked hues by experiment 
+bead_map <- tibble::tibble(
+  exp        = c("BR15-10", "BR15-11", "BR16-2", "BR16-3", "BR17-2"),
+  bead_class = c("both",    "homogenous", "mixed", "mixed", "mixed")
+)
+
+fig_plot <- fig_plot %>%
+  dplyr::mutate(exp_base = sub(" –.*$", "", exp_panel)) %>%
+  dplyr::left_join(bead_map, by = c("exp_base" = "exp")) %>%
+  dplyr::mutate(bead_class = factor(bead_class, levels = c("homogenous","mixed","both")))
+
+# colors & labeller 
+bead_cols <- c(homogenous = "#009E73", mixed = "#E69F00", both = "grey40")
+panel_labeller <- labeller(
+  exp_panel = function(v){
+    v <- sub("^BR", "", v)
+    v <- sub("DiatomLysate", "diatom lysate", v, fixed = TRUE)
+    v <- sub("0m", "0 m", v, fixed = TRUE)
+    v
+  }
+)
+
+plateau_data <- fig_plot %>% dplyr::distinct(exp_panel, bead_class, plateau_at_pos)
+
+# --- PLOT: −ΔDOC on the y-axis (0 at top, removal is negative) ---
+p <- ggplot(fig_plot, aes(x = bioreactor_n, y = delta_neg)) +
+  geom_hline(yintercept = 0, linewidth = 0.4, color = "grey80") +
+  geom_errorbar(aes(ymin = ymin_neg, ymax = ymax_neg),
+                width = 0.15, linewidth = 0.5, color = "grey60") +
+  geom_line(aes(color = bead_class), linewidth = 0.9) +
+  geom_point(aes(fill = bead_class), shape = 21, color = "black",
+             stroke = 0.4, size = 2.9) +
+  geom_text(aes(y = y_pct, label = scales::percent(pct_removed/100, accuracy = 1)),
+            size = 3) +
+  geom_text(data = subset(fig_plot, bioreactor_n > 1 & sig_label != ""),
+            aes(y = y_star, label = sig_label), size = 4) +
+  geom_vline(data = plateau_data,
+             aes(xintercept = plateau_at_pos, color = bead_class),
+             linetype = "dashed", linewidth = 0.7, na.rm = TRUE, show.legend = FALSE) +
+  scale_x_continuous(breaks = scales::pretty_breaks()) +
+  # extra space *downward* (more negative) for labels
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.28))) +
+  scale_color_manual(values = bead_cols, name = "Bead configuration",
+                     labels = c(homogenous = "Homogenous (1 mm)",
+                                mixed      = "Mixed (1 + 4 mm)",
+                                both       = "Both")) +
+  scale_fill_manual(values = bead_cols, name = "Bead configuration",
+                    labels = c(homogenous = "Homogenous (1 mm)",
+                               mixed      = "Mixed (1 + 4 mm)",
+                               both       = "Both")) +
+  guides(fill = "none") +
+  labs(
+    x = "Bioreactor position in series",
+    y = expression("\u2212"*Delta*"DOC ("*mu*"mol C L"^{-1}*")"),   # shows '−ΔDOC'
+    caption = "16-3 panels split by water source"
+  ) +
+  facet_wrap(~ exp_panel, scales = "free_y", labeller = panel_labeller) +
+  theme_bw(base_size = 11) +
+  coord_cartesian(clip = "off") +
+  theme(
+    legend.position  = "top",
+    legend.title     = element_text(face = "bold"),
+    panel.grid.minor = element_blank(),
+    strip.background = element_rect(fill = "white"),
+    strip.text       = element_text(face = "bold"),
+    plot.margin      = margin(6, 12, 6, 6)
+  )
+
+p
+
+
+# ---- tidy summary table (per panel × position) ----
+table_ms <- delta |>
+  transmute(
+    panel            = exp_panel,
+    position         = bioreactor_n,
+    delta_doc_uM     = round(delta_doc, 2),
+    se_delta_uM      = round(se_delta, 2),
+    pct_removed      = round(pct_removed, 1),
+    marginal_gain_uM = round(marginal_gain, 2),
+    p_marginal       = signif(p_marginal, 2),
+    sig_step         = case_when(
+      !is.na(p_marginal) & p_marginal < 0.001 ~ "***",
+      !is.na(p_marginal) & p_marginal < 0.01  ~ "**",
+      !is.na(p_marginal) & p_marginal < 0.05  ~ "*",
+      TRUE ~ ""
+    ),
+    plateau_step     = plateau_step
+  ) |>
+  arrange(panel, position)
+
+
+# ---- quick per-panel summary ----
+summary_text <- delta |>
+  group_by(exp_panel) |>
+  summarise(
+    max_pos     = max(bioreactor_n, na.rm = TRUE),
+    max_delta_uM = round(max(delta_doc, na.rm = TRUE), 1),
+    plateau_at  = plateau_by_panel$plateau_at_pos[match(exp_panel, plateau_by_panel$exp_panel)],
+    .groups = "drop"
+  ) |>
+  mutate(
+    note = if_else(
+      is.na(plateau_at),
+      glue("No plateau detected up to position {max_pos} (max ΔDOC ≈ {max_delta_uM} µM)."),
+      glue("Plateau detected at step into position {plateau_at}.")
+    )
+  )
+
+# print outputs in console
+print(table_ms)
+print(summary_text)
+print(p)
+```
+
+```
+

@@ -1,0 +1,144 @@
+---
+title: "SBC Bioreactors Bottle Bacterial Abundance and DOC"
+author: "Nicholas Baetge"
+date: "2025-08-27"
+output: html_document
+---
+
+```{r}
+# ============================
+# Supplement: DOC (fixed y) + BA (free y), colored by treatment/cohort
+# DNA markers on BR16-3 BA only
+# ============================
+
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(scales)
+library(patchwork)
+library(ggh4x)
+
+data_file <- "~/github/sbc_bioreactors/data/bioreactor_data.xlsx"
+df <- read_excel(data_file, sheet = 1) %>% clean_names()
+
+focus_exps <- c("BR15-11", "BR16-1", "BR16-3")
+d <- df %>%
+  filter(exp %in% focus_exps, type == "bottle") %>%
+  mutate(trt = ifelse(is.na(trt) | trt == "", "0m", as.character(trt)))
+
+# Exclude BR16-1 contaminated late run
+d <- d %>% filter(!(exp == "BR16-1" & hours_elapsed >= 2000))
+
+# BR16-1 cohort (start date per bottle)
+cohort_map <- d %>%
+  filter(exp == "BR16-1") %>%
+  group_by(bottle) %>%
+  summarise(start_ymd = min(ymd, na.rm = TRUE), .groups = "drop")
+
+d <- d %>%
+  left_join(cohort_map, by = "bottle")
+
+# Group label: BR16-1 by cohort; others by treatment
+d <- d %>%
+  mutate(group_label = case_when(
+    exp == "BR16-1" ~ paste0("Cohort ", start_ymd),
+    TRUE            ~ paste0("Trt ", trt)
+  ))
+
+# Keep a stable color mapping across both plots
+group_levels <- d %>% distinct(group_label) %>% arrange(group_label) %>% pull(group_label)
+
+# ---- Aggregate per experiment × group × time (SD BEFORE mean) ----
+summ <- d %>%
+  group_by(exp, group_label, hours_elapsed) %>%
+  summarise(
+    sd_doc   = sd(mean_doc, na.rm = TRUE),
+    mean_doc = mean(mean_doc, na.rm = TRUE),
+    sd_ba    = sd(mean_ba,   na.rm = TRUE),
+    mean_ba  = mean(mean_ba, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(group_label = factor(group_label, levels = group_levels)) %>% 
+  drop_na(mean_ba)
+
+# Colorblind-safe palette (Okabe–Ito, enough colors for groups)
+pal <- c("#56B4E9", "#009E73", "#E69F00", "#CC79A7", "#0072B2", "#D55E00")
+pal <- setNames(rep(pal, length.out = length(group_levels)), group_levels)
+
+# 1) Keep panel names SIMPLE:
+long <- bind_rows(
+  summ %>%
+    transmute(exp, group_label, hours_elapsed,
+              panel = "DOC",
+              value = mean_doc,
+              sd    = sd_doc),
+  summ %>%
+    transmute(exp, group_label, hours_elapsed,
+              panel = "Bacterial abundance",
+              value = mean_ba,
+              sd    = sd_ba)
+)
+
+# 2) Make sure dna_markers exists (skip if you already defined it above)
+if (!exists("dna_markers")) {
+  dna_markers <- df %>%
+    clean_names() %>%
+    filter(exp == "BR16-3", type == "bottle", !is.na(dna_id)) %>%
+    distinct(exp, hours_elapsed, dna_id)
+}
+
+# Put DNA markers in the BA facet by using the SAME panel key as  data:
+dna_markers_ba <- dna_markers %>% mutate(panel = "Bacterial abundance")
+
+# 3) Labeller that renders strip text with units via plotmath (label_parsed)
+panel_map <- c(
+  "DOC" = "paste('DOC (', mu, 'mol C L'^-1, ')')",
+  "Bacterial abundance" = "paste('Bacterial abundance (', cells, ' mL'^-1, ')')"
+)
+panel_labs <- labeller(panel = as_labeller(panel_map, label_parsed))
+
+# 4) Facet + per-row y-scales using the SIMPLE panel keys
+p <- ggplot(long, aes(x = hours_elapsed, y = value, group = group_label)) +
+  geom_line(aes(color = group_label), linewidth = 0.9, alpha = 0.9) +
+  geom_point(aes(fill = group_label), shape = 21, color = "black",
+             stroke = 0.4, size = 2.4) +
+  geom_errorbar(aes(ymin = value - sd, ymax = value + sd, color = group_label),
+                width = 0.05, alpha = 0.7, linewidth = 0.5) +
+  geom_vline(data = dna_markers_ba,
+             aes(xintercept = hours_elapsed),
+             inherit.aes = FALSE, linetype = "22", linewidth = 0.6, color = "grey40") +
+  geom_text(data = dna_markers_ba,
+            aes(x = hours_elapsed, y = Inf, label = dna_id),
+            inherit.aes = FALSE, vjust = 1.4, size = 3.1, color = "grey20") +
+  ggh4x::facet_grid2(
+    rows = vars(panel), cols = vars(exp),
+    scales = "free_y", independent = "y",
+    labeller = panel_labs
+  ) +
+  ggh4x::facetted_pos_scales(
+    y = list(
+      panel == "DOC" ~ scale_y_continuous(limits = c(60, 90)),
+      panel == "Bacterial abundance" ~ scale_y_continuous(labels = scales::label_scientific())
+    )
+  ) +
+  scale_x_continuous(
+    trans = "log10",
+    breaks = c(0, 4, 7, 12, 24, 48, 72, 96, 168, 240, 396, 720, 1680),
+    labels = scales::label_number(accuracy = 1)
+  ) +
+  scale_color_manual(values = pal, name = "Treatment / Cohort") +
+  scale_fill_manual(values = pal,  name = "Treatment / Cohort") +
+  labs(x = "Hours elapsed (log scale)", y = NULL) +
+  theme_bw(base_size = 11) +
+  theme(
+    legend.position   = "bottom",
+    legend.title      = element_text(face = "bold"),
+    panel.grid.minor  = element_blank(),
+    strip.background  = element_rect(fill = "white"),
+    strip.text        = element_text(face = "bold")
+  )
+
+
+
+```
+
