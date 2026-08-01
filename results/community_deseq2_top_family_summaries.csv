@@ -1,0 +1,21 @@
+Phylum,Family,direction,n_significant_asvs,median_log2_fold_change,minimum_adjusted_p
+Unclassified phylum,Unclassified family,Enriched at bottom,38,-8.708337751595021,0.0059415554246876594
+Planctomycetota,Pirellulaceae,Enriched at bottom,8,-8.098131781644042,0.008522300349764667
+Pseudomonadota,Unclassified family,Enriched at bottom,6,-8.409131544194366,0.0045486157061582705
+Acidobacteriota,Incertae sedis (Acidobacteriota),Enriched at bottom,3,-7.953754629982148,0.009205310921505753
+Bacteroidota,Saprospiraceae,Enriched at bottom,3,-9.107449355350864,0.009205310921505753
+Pseudomonadota,Sphingomonadaceae_2,Enriched at bottom,3,-8.288429023872428,0.009205310921505753
+Bacteroidota,Cyclobacteriaceae,Enriched at bottom,3,-8.403129031474199,0.012014547052976714
+Thermoproteota,Nitrosopumilaceae_2,Enriched at bottom,2,-9.843630425052748,0.0045486157061582705
+Dadabacteria,Incertae sedis (Dadabacteria),Enriched at bottom,2,-8.810760378522382,0.008522300349764667
+Planctomycetota,Pirellulaceae,Enriched at top,2,8.41151544343101,0.009285493696539188
+Planctomycetota,Unclassified family,Enriched at bottom,2,-9.53399572141421,0.009285493696539188
+Acidobacteriota,Thermoanaerobaculaceae,Enriched at bottom,2,-8.30645778032369,0.009802669435519907
+Planctomycetota,Incertae sedis (Planctomycetota),Enriched at bottom,2,-8.762172290656094,0.012014547052976714
+Pseudomonadota,Incertae sedis (Pseudomonadota),Enriched at bottom,2,-7.93764986075818,0.01596534227960185
+Chloroflexota,A4b_2,Enriched at bottom,1,-11.902972743548355,0.0045486157061582705
+Pseudomonadota,Kiloniellaceae_2,Enriched at bottom,1,-11.801426196562822,0.0045486157061582705
+Elusimicrobiota,Incertae sedis (Elusimicrobiota),Enriched at bottom,1,-11.253936133045654,0.0059415554246876594
+Nitrospirota,Nitrospiraceae,Enriched at bottom,1,-11.059296317957664,0.0059415554246876594
+Planctomycetota,Phycisphaeraceae,Enriched at bottom,1,-11.14551060106361,0.0059415554246876594
+Pseudomonadota,Unclassified family,Enriched at top,1,11.526805106638276,0.007217561093193881

@@ -1,301 +1,965 @@
 ---
-title: "SBC Bioreactors Bottle Comparison"
+title: "SBC Bioreactors: Bottle Comparison"
 author: "Nicholas Baetge"
-date: "2025-08-26"
+date: "2026-07-31"
 output: html_document
 ---
 
-```{r}
-# ---------- PREP ----------
-
+```{r setup, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(readxl)
 library(janitor)
 library(scales)
+library(patchwork)
+library(ggnewscale)
 
+# Update this path as needed.
 data_file <- "~/github/sbc_bioreactors/data/bioreactor_data.xlsx"
-ylims_panelA <- c(60, 90)
 
-df <- read_excel(data_file, sheet = 1) %>% clean_names()
 focus_exps <- c("BR15-11", "BR16-1", "BR16-3")
-d <- df %>% filter(exp %in% focus_exps)
+detection_limit <- 1.5
 
-# Exclude BR16-1 second-pass and normalize treatment labels
-d_clean <- d %>%
-  filter(!(exp == "BR16-1" & hours_elapsed >= 2000))
-norm_trt <- function(x) ifelse(is.na(x) | x == "", "0m", as.character(x))
+norm_trt <- function(x) {
+  case_when(
+    is.na(x) | x == "" | x == "0m" ~ "Ambient",
+    x == "DiatomLysate" ~ "Diatom lysate",
+    TRUE ~ as.character(x)
+  )
+}
 
-# ---------- BOTTLE time-series ----------
-bottle_cohort <- d_clean %>%
+safe_sd <- function(x) {
+  x <- x[is.finite(x)]
+  if (length(x) > 1) sd(x) else NA_real_
+}
+
+format_duration <- function(hours) {
+  case_when(
+    !is.finite(hours) ~ NA_character_,
+    hours >= 48 ~ paste0(round(hours / 24, 1), " d"),
+    TRUE ~ paste0(round(hours, 1), " h")
+  )
+}
+
+df <- read_excel(data_file, sheet = 1) %>%
+  clean_names() %>%
+  filter(exp %in% focus_exps) %>%
+  # Remove rows without DOC data and the documented BR16-1 second pass.
+  filter(is.finite(mean_doc)) %>%
+  filter(!(exp == "BR16-1" & hours_elapsed >= 2000)) %>%
+  mutate(
+    trt_lab = norm_trt(trt),
+    exp_lab = sub("^BR", "", exp)
+  )
+```
+
+# Analysis framework
+
+Bottle cultures and bioreactors are compared at contrasting operational endpoints rather than equal elapsed times. Bottle endpoints are the final measured time point for each independent bottle. Bioreactor endpoints are the effluent after hydraulic flushing criteria were met. For BR15-11 and BR16-3, bottle endpoints are compared with both the first-column and terminal serial-configuration endpoints. BR16-1 retains four date-matched comparisons initiated on successive days.
+
+```{r bottle-data}
+# Assign each independent bottle to its initiation date. This is especially
+# important for BR16-1, where paired cohorts began on successive days.
+bottle_cohort <- df %>%
   filter(type == "bottle", !is.na(bottle)) %>%
-  group_by(exp, bottle) %>%
+  group_by(exp, trt_lab, bottle) %>%
   summarise(start_ymd = min(ymd, na.rm = TRUE), .groups = "drop")
 
-bottles_clean <- d_clean %>%
-  filter(type == "bottle", !is.na(bottle)) %>%
-  left_join(bottle_cohort, by = c("exp","bottle")) %>%
-  mutate(trt = norm_trt(trt))
+bottles <- df %>%
+  filter(type == "bottle", !is.na(bottle), is.finite(hours_elapsed)) %>%
+  left_join(
+    bottle_cohort,
+    by = c("exp", "trt_lab", "bottle")
+  )
 
-# mean ± sd over bottles at each hour (per exp × trt × start date)
-bottle_time_mean <- bottles_clean %>%
-  group_by(exp, trt, start_ymd, hours_elapsed) %>%
+# Bottle time-series summary: arithmetic mean ± SD among independent bottles.
+bottle_time_summary <- bottles %>%
+  group_by(exp, exp_lab, trt_lab, start_ymd, hours_elapsed) %>%
   summarise(
-    doc_mean = mean(mean_doc, na.rm = TRUE),
-    doc_sd   = sd(mean_doc, na.rm = TRUE),
-    .groups  = "drop"
-  )
-
-# ---------- bioreactor runs  ----------
-bioreactors_clean <- d_clean %>%
-  filter(type == "bioreactor", !is.na(hours_elapsed)) %>%
-  mutate(trt = norm_trt(trt))
-
-r_in <- bioreactors_clean %>%
-  group_by(exp, ymd, trt) %>%
-  slice_min(order_by = hours_elapsed, n = 1, with_ties = FALSE) %>%
-  ungroup() %>%
-  transmute(exp, trt, ymd, hours_in = hours_elapsed, doc_in = mean_doc)
-
-r_out <- bioreactors_clean %>%
-  group_by(exp, ymd, trt) %>%
-  slice_max(order_by = hours_elapsed, n = 1, with_ties = FALSE) %>%
-  ungroup() %>%
-  transmute(exp, trt, ymd, hours_out = hours_elapsed, doc_out = mean_doc)
-
-r_runs <- r_in %>%
-  inner_join(r_out, by = c("exp","trt","ymd")) %>%
-  mutate(
-    bdoc = doc_in - doc_out,    # BDOC per bioreactor run
-    method = "bioreactor",
-    start_ymd = ymd
-  )
-
-# ---------- BOTTLE BDOC (Panel B) ----------
-b_init <- bottles_clean %>%
-  filter(hours_elapsed == 0) %>%
-  group_by(exp, trt, start_ymd, bottle) %>%
-  summarise(doc_init = mean(mean_doc, na.rm = TRUE), .groups = "drop")
-
-b_final <- bottles_clean %>%
-  group_by(exp, trt, start_ymd, bottle) %>%
-  slice_max(order_by = hours_elapsed, n = 1, with_ties = FALSE) %>%
-  ungroup() %>%
-  transmute(exp, trt, start_ymd, bottle,
-            hours_final = hours_elapsed, doc_final = mean_doc)
-
-b_bdoc <- b_init %>%
-  inner_join(b_final, by = c("exp","trt","start_ymd","bottle")) %>%
-  mutate(
-    bdoc = doc_init - doc_final,
-    method = "bottle"
-  )
-
-# Aggregate bottle BDOC to cohort-level (per exp × trt × start date)
-b_bdoc_by_cohort <- b_bdoc %>%
-  group_by(exp, trt, start_ymd) %>%
-  summarise(bdoc = mean(bdoc, na.rm = TRUE), .groups = "drop") %>%
-  mutate(method = "bottle")
-
-# bioreactor BDOC per run for Panel B
-r_bdoc_runs <- r_runs %>%
-  select(exp, trt, start_ymd, bdoc, method)
-
-# Common clean facet labels: drop "BR"
-d_clean <- d_clean %>% mutate(exp_nobr = sub("^BR", "", exp))
-
-
-```
-
-```{r}
-# Start-date colors 
-start_levels  <- sort(unique(c(bottle_time_mean$start_ymd, r_runs$start_ymd)))
-start_palette <- c("#56B4E9", "#009E73", "#E69F00", "#CC79A7", "#0072B2", "#D55E00")
-start_cols    <- setNames(start_palette[seq_along(start_levels)], start_levels)
-
-# factors + facet label without "BR"
-bottle_time_mean <- bottle_time_mean %>%
-  mutate(
-    start_ymd = factor(start_ymd, levels = start_levels),
-    trt       = factor(trt, levels = c("0m", "DiatomLysate"))
-  ) %>%
-  left_join(d_clean %>% distinct(exp, exp_nobr), by = "exp")
-
-r_runs <- r_runs %>%
-  mutate(
-    start_ymd = factor(start_ymd, levels = start_levels),
-    trt       = factor(trt, levels = c("0m", "DiatomLysate"))
-  ) %>%
-  left_join(d_clean %>% distinct(exp, exp_nobr), by = "exp")
-
-pA <- ggplot() +
-  geom_ribbon(
-    data = bottle_time_mean,
-    aes(x = hours_elapsed,
-        ymin = doc_mean - doc_sd, ymax = doc_mean + doc_sd,
-        group = interaction(exp, start_ymd, trt),
-        fill  = start_ymd),
-    alpha = 0.12, color = NA
-  ) +
-  geom_line(
-    data = bottle_time_mean,
-    aes(x = hours_elapsed, y = doc_mean,
-        color = start_ymd,
-        linetype = "bottle",
-        group = interaction(exp, start_ymd, trt)),
-    linewidth = 0.8
-  ) +
-  geom_point(
-    data = bottle_time_mean,
-    aes(x = hours_elapsed, y = doc_mean,
-        fill = start_ymd, shape = trt),
-    size = 2.3, color = "black", stroke = 0.4
-  ) +
-  geom_segment(
-    data = r_runs,
-    aes(x = hours_in, xend = hours_out, y = doc_in, yend = doc_out,
-        color = start_ymd,
-        linetype = "bioreactor",
-        group = interaction(exp, start_ymd, trt)),
-    linewidth = 1.0
-  ) +
-  geom_point(
-    data = r_runs,
-    aes(x = hours_in, y = doc_in, fill = start_ymd, shape = trt),
-    size = 2.6, color = "black", stroke = 0.5
-  ) +
-  geom_point(
-    data = r_runs,
-    aes(x = hours_out, y = doc_out, fill = start_ymd, shape = trt),
-    size = 2.6, color = "black", stroke = 0.5
-  ) +
-  facet_wrap(~ exp_nobr, nrow = 1) +
-  scale_x_continuous(
-    trans = "log10",
-    breaks = c(0, 4, 7, 12, 24, 48, 72, 168, 240, 396, 720, 1680)
-  ) +
-  coord_cartesian(ylim = ylims_panelA) +
-  scale_color_manual(values = start_cols, name = "Start date") +
-  scale_fill_manual(values = start_cols,  name = "Start date") +
-  scale_linetype_manual(values = c(bottle = "solid", bioreactor = "22"), name = "Method") +
-  scale_shape_manual(values = c(`0m` = 21, DiatomLysate = 24), name = "Treatment") +
-  labs(
-    x = "Hours elapsed (log scale)",
-    y = expression("DOC (" * mu * "mol C L"^{-1} * ")")
-  ) +
-  theme_bw(base_size = 11) +
-  theme(
-    legend.position = "bottom",
-    panel.grid.minor = element_blank(),
-    strip.background = element_rect(fill = "white"),
-    strip.text = element_text(face = "bold")
-  ) +
-  ggtitle("(a) Bottle (solid) vs bioreactor (dashed): shape = treatment, color = start date")
-
-```
-
-
-```{r}
-bdoc_long <- bind_rows(
-  b_bdoc_by_cohort %>% mutate(method = "bottle"),
-  r_bdoc_runs       %>% mutate(method = "bioreactor")
-) %>%
-  mutate(
-    trt = ifelse(is.na(trt) | trt == "", "0m", as.character(trt)),
-    exp_trt = paste0(sub("^BR", "", exp), " — ", trt)  # drop BR in x labels
-  )
-
-bdoc_summary <- bdoc_long %>%
-  group_by(exp_trt, method) %>%
-  summarise(
-    mean_bdoc = mean(bdoc, na.rm = TRUE),
-    se_bdoc   = sd(bdoc, na.rm = TRUE) / sqrt(dplyr::n()),
-    n         = dplyr::n(),
+    mean_doc = mean(mean_doc, na.rm = TRUE),
+    sd_doc = safe_sd(mean_doc),
+    n_bottles = n_distinct(bottle),
     .groups = "drop"
   )
 
-# --- Build Δ labels ---
-desc_tbl <- bdoc_summary %>%
-  select(exp_trt, method, mean_bdoc, se_bdoc, n) %>%
-  pivot_wider(names_from = method, values_from = c(mean_bdoc, se_bdoc, n)) %>%
+# Initial and final measured DOC for each independent bottle.
+bottle_initial <- bottles %>%
+  group_by(exp, exp_lab, trt_lab, start_ymd, bottle) %>%
+  slice_min(hours_elapsed, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  transmute(
+    exp, exp_lab, trt_lab, start_ymd, bottle,
+    initial_hours = hours_elapsed,
+    initial_doc = mean_doc
+  )
+
+bottle_final <- bottles %>%
+  group_by(exp, exp_lab, trt_lab, start_ymd, bottle) %>%
+  slice_max(hours_elapsed, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  transmute(
+    exp, exp_lab, trt_lab, start_ymd, bottle,
+    final_hours = hours_elapsed,
+    final_doc = mean_doc
+  )
+
+bottle_endpoint_units <- bottle_initial %>%
+  inner_join(
+    bottle_final,
+    by = c("exp", "exp_lab", "trt_lab", "start_ymd", "bottle")
+  ) %>%
   mutate(
-    delta  = mean_bdoc_bioreactor - mean_bdoc_bottle,
-    dagger_flag = (n_bottle < 2 | n_bioreactor < 2),
-    label  = ifelse(
-      dagger_flag,
-      paste0("Delta==", sprintf('%.2f', delta), "~mu*mol*C*L^{-1}*'\u2020'"),
-      paste0("Delta==", sprintf('%.2f', delta), "~mu*mol*C*L^{-1}")
+    method = "Batch culture",
+    configuration = "Final measured endpoint",
+    unit_id = paste(exp, trt_lab, start_ymd, bottle, sep = "__"),
+    doc_removal = initial_doc - final_doc,
+    pct_removal = 100 * doc_removal / initial_doc,
+    duration_h = final_hours
+  )
+
+bottle_endpoint_summary <- bottle_endpoint_units %>%
+  group_by(
+    exp, exp_lab, trt_lab, start_ymd,
+    method, configuration, duration_h
+  ) %>%
+  summarise(
+    n_independent = n_distinct(bottle),
+    mean_initial_doc = mean(initial_doc, na.rm = TRUE),
+    sd_initial_doc = safe_sd(initial_doc),
+    mean_final_doc = mean(final_doc, na.rm = TRUE),
+    sd_final_doc = safe_sd(final_doc),
+    mean_doc_removal = mean(doc_removal, na.rm = TRUE),
+    sd_doc_removal = safe_sd(doc_removal),
+    mean_pct_removal = mean(pct_removal, na.rm = TRUE),
+    sd_pct_removal = safe_sd(pct_removal),
+    .groups = "drop"
+  )
+```
+
+```{r bioreactor-data}
+bioreactors <- df %>%
+  filter(
+    type == "bioreactor",
+    is.finite(hours_elapsed),
+    is.finite(bioreactor_n)
+  )
+
+# One influent concentration per experiment × date × treatment.
+bioreactor_influent <- bioreactors %>%
+  filter(bioreactor_n == 0 | hours_elapsed == 0) %>%
+  group_by(exp, exp_lab, trt_lab, ymd) %>%
+  summarise(
+    influent_doc = mean(mean_doc, na.rm = TRUE),
+    influent_analytical_sd = safe_sd(mean_doc),
+    .groups = "drop"
+  )
+
+# Retain first-column and terminal serial endpoints explicitly.
+# For BR16-1, the first column is also the terminal configuration.
+bioreactor_effluent_all <- bioreactors %>%
+  filter(bioreactor_n > 0) %>%
+  group_by(exp, exp_lab, trt_lab, ymd) %>%
+  mutate(max_columns = max(bioreactor_n, na.rm = TRUE)) %>%
+  ungroup() %>%
+  filter(bioreactor_n == 1 | bioreactor_n == max_columns) %>%
+  mutate(
+    endpoint_type = case_when(
+      bioreactor_n == 1 & max_columns == 1 ~ "Single column",
+      bioreactor_n == 1 ~ "Single column",
+      bioreactor_n == max_columns ~ paste0(as.integer(max_columns), "-column series"),
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  distinct(
+    exp, exp_lab, trt_lab, ymd,
+    endpoint_type, bioreactor_n, bioreactor,
+    beads, flowrate, hours_elapsed,
+    mean_doc, sd_doc, se_doc,
+    .keep_all = TRUE
+  )
+
+bioreactor_endpoint_units <- bioreactor_effluent_all %>%
+  left_join(
+    bioreactor_influent,
+    by = c("exp", "exp_lab", "trt_lab", "ymd")
+  ) %>%
+  filter(is.finite(influent_doc)) %>%
+  mutate(
+    start_ymd = ymd,
+    method = "Bioreactor",
+    configuration = endpoint_type,
+    unit_id = paste(exp, trt_lab, ymd, endpoint_type, bioreactor, sep = "__"),
+    initial_doc = influent_doc,
+    final_doc = mean_doc,
+    doc_removal = initial_doc - final_doc,
+    pct_removal = 100 * doc_removal / initial_doc,
+    duration_h = hours_elapsed
+  )
+
+# Summary uses SD among independent bioreactors/configurations where replication exists.
+bioreactor_endpoint_summary <- bioreactor_endpoint_units %>%
+  group_by(
+    exp, exp_lab, trt_lab, start_ymd,
+    method, configuration, duration_h,
+    bioreactor_n, beads, flowrate
+  ) %>%
+  summarise(
+    n_independent = n_distinct(unit_id),
+    mean_initial_doc = mean(initial_doc, na.rm = TRUE),
+    sd_initial_doc = safe_sd(initial_doc),
+    mean_final_doc = mean(final_doc, na.rm = TRUE),
+    sd_final_doc = safe_sd(final_doc),
+    mean_doc_removal = mean(doc_removal, na.rm = TRUE),
+    sd_doc_removal = safe_sd(doc_removal),
+    mean_pct_removal = mean(pct_removal, na.rm = TRUE),
+    sd_pct_removal = safe_sd(pct_removal),
+    .groups = "drop"
+  )
+```
+
+```{r br16-3-early-removal}
+# Quantify Reviewer 3's observation: how much of the final bottle-culture
+# removal in BR16-3 occurred by the first 24-h sample?
+br16_3_24h <- bottles %>%
+  filter(exp == "BR16-3", hours_elapsed %in% c(0, 24)) %>%
+  select(exp, exp_lab, trt_lab, start_ymd, bottle, hours_elapsed, mean_doc) %>%
+  pivot_wider(
+    names_from = hours_elapsed,
+    values_from = mean_doc,
+    names_prefix = "hour_"
+  ) %>%
+  inner_join(
+    bottle_final %>%
+      filter(exp == "BR16-3") %>%
+      select(exp, exp_lab, trt_lab, start_ymd, bottle, final_hours, final_doc),
+    by = c("exp", "exp_lab", "trt_lab", "start_ymd", "bottle")
+  ) %>%
+  mutate(
+    removal_24h = hour_0 - hour_24,
+    removal_final = hour_0 - final_doc,
+    fraction_final_by_24h = removal_24h / removal_final,
+    percent_final_by_24h = 100 * fraction_final_by_24h
+  )
+
+br16_3_24h_summary <- br16_3_24h %>%
+  group_by(exp, exp_lab, trt_lab, final_hours) %>%
+  summarise(
+    n_bottles = n_distinct(bottle),
+    mean_removal_24h = mean(removal_24h, na.rm = TRUE),
+    sd_removal_24h = safe_sd(removal_24h),
+    mean_removal_final = mean(removal_final, na.rm = TRUE),
+    sd_removal_final = safe_sd(removal_final),
+    mean_percent_final_by_24h = mean(percent_final_by_24h, na.rm = TRUE),
+    sd_percent_final_by_24h = safe_sd(percent_final_by_24h),
+    .groups = "drop"
+  )
+```
+
+# Experiment-by-experiment operational endpoint comparisons
+
+```{r paired-comparisons}
+# General bottle endpoint summaries for BR15-11 and BR16-3.
+bottle_general <- bottle_endpoint_summary %>%
+  filter(exp %in% c("BR15-11", "BR16-3")) %>%
+  group_by(exp, exp_lab, trt_lab) %>%
+  summarise(
+    bottle_duration_h = max(duration_h, na.rm = TRUE),
+    bottle_n = sum(n_independent),
+    bottle_removal = mean(mean_doc_removal, na.rm = TRUE),
+    bottle_sd = if_else(
+      n() == 1,
+      first(sd_doc_removal),
+      safe_sd(mean_doc_removal)
+    ),
+    .groups = "drop"
+  )
+
+reactor_general <- bioreactor_endpoint_summary %>%
+  filter(exp %in% c("BR15-11", "BR16-3")) %>%
+  select(
+    exp, exp_lab, trt_lab, configuration,
+    reactor_duration_h = duration_h,
+    reactor_n = n_independent,
+    reactor_removal = mean_doc_removal,
+    reactor_sd = sd_doc_removal
+  )
+
+comparison_general <- reactor_general %>%
+  left_join(bottle_general, by = c("exp", "exp_lab", "trt_lab"))
+
+# Date-matched BR16-1 comparisons. Two independent bottles are averaged within
+# each cohort, then compared with the single-column bioreactor run begun that day.
+br16_1_bottle_by_date <- bottle_endpoint_summary %>%
+  filter(exp == "BR16-1") %>%
+  select(
+    exp, exp_lab, trt_lab, start_ymd,
+    bottle_duration_h = duration_h,
+    bottle_n = n_independent,
+    bottle_removal = mean_doc_removal,
+    bottle_sd = sd_doc_removal
+  )
+
+br16_1_reactor_by_date <- bioreactor_endpoint_summary %>%
+  filter(exp == "BR16-1", configuration == "Single column") %>%
+  select(
+    exp, exp_lab, trt_lab, start_ymd, configuration,
+    reactor_duration_h = duration_h,
+    reactor_n = n_independent,
+    reactor_removal = mean_doc_removal,
+    reactor_sd = sd_doc_removal
+  )
+
+comparison_br16_1 <- br16_1_reactor_by_date %>%
+  left_join(
+    br16_1_bottle_by_date,
+    by = c("exp", "exp_lab", "trt_lab", "start_ymd")
+  )
+
+comparison_table <- bind_rows(
+  comparison_general %>% mutate(start_ymd = NA_real_),
+  comparison_br16_1
+) %>%
+  mutate(
+    absolute_difference = reactor_removal - bottle_removal,
+    comparison_class = case_when(
+      absolute_difference >= detection_limit ~ "Bioreactor greater by ≥1.5",
+      absolute_difference <= -detection_limit ~ "Batch culture greater by ≥1.5",
+      TRUE ~ "Difference <1.5"
+    ),
+    reactor_to_bottle_ratio = if_else(
+      bottle_removal >= detection_limit,
+      reactor_removal / bottle_removal,
+      NA_real_
+    ),
+    comparison_id = case_when(
+      exp == "BR16-1" ~ paste0(exp_lab, " ", start_ymd, " — ", configuration),
+      TRUE ~ paste0(exp_lab, " — ", trt_lab, " — ", configuration)
     )
   )
 
-y_pad <- bdoc_summary %>%
-  group_by(exp_trt) %>%
-  summarise(
-    top  = max(mean_bdoc + se_bdoc, na.rm = TRUE),
-    rng  = diff(range(mean_bdoc, na.rm = TRUE)),
-    pad  = pmax(0.08 * ifelse(is.finite(rng) & rng > 0, rng, top), 0.8),
-    .groups = "drop"
+# A restrained, descriptive general takeaway rather than a pooled percentage.
+overall_pattern <- comparison_table %>%
+  count(comparison_class, name = "n_comparisons") %>%
+  complete(
+    comparison_class = c(
+      "Bioreactor greater by ≥1.5",
+      "Difference <1.5",
+      "Batch culture greater by ≥1.5"
+    ),
+    fill = list(n_comparisons = 0)
+  )
+
+# One terminal bioreactor endpoint per paired experiment/treatment/cohort.
+# This avoids over-weighting BR15-11 and BR16-3, for which both single- and
+# serial-column endpoints are displayed. The terminal endpoint is the largest
+# available column configuration; BR16-1 contributes its single-column endpoint.
+terminal_comparison_table <- comparison_table %>%
+  mutate(
+    configuration_rank = case_when(
+      configuration == "Single column" ~ 1,
+      str_detect(configuration, "^[0-9]+-column") ~
+        as.numeric(str_extract(configuration, "^[0-9]+")),
+      TRUE ~ NA_real_
+    )
   ) %>%
-  mutate(y_lab_neg = -(top + pad))   # <- label goes *below* the bar
+  group_by(exp, exp_lab, trt_lab, start_ymd) %>%
+  slice_max(configuration_rank, n = 1, with_ties = FALSE) %>%
+  ungroup()
 
-desc_pos <- left_join(desc_tbl, y_pad, by = "exp_trt")
+terminal_pattern <- terminal_comparison_table %>%
+  count(comparison_class, name = "n_comparisons") %>%
+  complete(
+    comparison_class = c(
+      "Bioreactor greater by ≥1.5",
+      "Difference <1.5",
+      "Batch culture greater by ≥1.5"
+    ),
+    fill = list(n_comparisons = 0)
+  )
 
-method_cols <- c(bottle = "#0072B2", bioreactor = "#E69F00")
+n_terminal <- nrow(terminal_comparison_table)
+n_terminal_equal_or_greater <- terminal_comparison_table %>%
+  filter(absolute_difference >= -detection_limit) %>%
+  nrow()
+n_terminal_greater <- terminal_comparison_table %>%
+  filter(absolute_difference >= detection_limit) %>%
+  nrow()
 
-# --- Panel B: plot −BDOC (down is more removal) ---
-pB <- ggplot(bdoc_summary,
-             aes(x = exp_trt, y = -mean_bdoc, fill = method)) +  # <- flip sign
-  geom_col(position = position_dodge(width = 0.65), width = 0.6, color = "black", linewidth = 0.15) +
-  geom_errorbar(
-    aes(ymin = -(mean_bdoc + se_bdoc), ymax = -(mean_bdoc - se_bdoc)),  # <- flipped errors
-    position = position_dodge(width = 0.65), width = 0.16, linewidth = 0.6
+terminal_takeaway_text <- paste0(
+  "Terminal bioreactor endpoints equaled or exceeded final measured batch-culture endpoints ",
+  "within analytical resolution in ", n_terminal_equal_or_greater, " of ", n_terminal,
+  " paired comparisons; they exceeded batch endpoints by ≥", detection_limit,
+  " µmol C L⁻¹ in ", n_terminal_greater, "."
+)
+```
+
+# Figure 5A: complete DOC time series
+
+```{r figure-5a, fig.width=11.5, fig.height=6.5}
+# Required packages
+library(ggplot2)
+library(dplyr)
+library(scales)
+library(ggnewscale)
+library(grid)
+
+# Start-date colors are useful primarily for the four BR16-1 cohorts.
+start_levels <- sort(unique(c(
+  bottle_time_summary$start_ymd,
+  bioreactor_endpoint_units$start_ymd
+)))
+
+start_palette <- c(
+  "#56B4E9",
+  "#009E73",
+  "#E69F00",
+  "#CC79A7",
+  "#0072B2",
+  "#D55E00",
+  "#F0E442",
+  "#999999"
+)
+
+if (length(start_levels) > length(start_palette)) {
+  stop(
+    "There are more start-date levels than available colors. ",
+    "Add additional colors to start_palette."
+  )
+}
+
+start_cols <- setNames(
+  start_palette[seq_along(start_levels)],
+  start_levels
+)
+
+# Prepare bioreactor endpoint data.
+reactor_segments <- bioreactor_endpoint_units %>%
+  mutate(
+    start_ymd_factor = factor(
+      start_ymd,
+      levels = start_levels
+    ),
+
+    configuration = factor(
+      configuration,
+      levels = c(
+        "Single column",
+        "3-column series",
+        "5-column series"
+      )
+    ),
+
+    panel_label = case_when(
+      exp == "BR15-11" ~ "15-11 — ambient",
+      exp == "BR16-1" ~ "16-1 — ambient",
+      exp == "BR16-3" & trt_lab == "Ambient" ~
+        "16-3 — ambient",
+      exp == "BR16-3" & trt_lab == "Diatom lysate" ~
+        "16-3 — diatom lysate",
+      TRUE ~ paste(exp_lab, trt_lab, sep = " — ")
+    )
+  )
+
+# Prepare bottle time-series data.
+bottle_time_plot <- bottle_time_summary %>%
+  mutate(
+    start_ymd_factor = factor(
+      start_ymd,
+      levels = start_levels
+    ),
+
+    panel_label = case_when(
+      exp == "BR15-11" ~ "15-11 — ambient",
+      exp == "BR16-1" ~ "16-1 — ambient",
+      exp == "BR16-3" & trt_lab == "Ambient" ~
+        "16-3 — ambient",
+      exp == "BR16-3" & trt_lab == "Diatom lysate" ~
+        "16-3 — diatom lysate",
+      TRUE ~ paste(exp_lab, trt_lab, sep = " — ")
+    )
+  )
+
+panel_levels <- c(
+  "15-11 — ambient",
+  "16-1 — ambient",
+  "16-3 — ambient",
+  "16-3 — diatom lysate"
+)
+
+reactor_segments <- reactor_segments %>%
+  mutate(
+    panel_label = factor(
+      panel_label,
+      levels = panel_levels
+    )
+  )
+
+bottle_time_plot <- bottle_time_plot %>%
+  mutate(
+    panel_label = factor(
+      panel_label,
+      levels = panel_levels
+    )
+  )
+
+# Reduced pseudo-log breaks to prevent crowding.
+# Longer intervals are labeled in days.
+time_breaks <- c(
+  0,
+  4,
+  12,
+  24,
+  72,
+  168,
+  336,
+  672,
+  1680
+)
+
+time_labels <- c(
+  "0",
+  "4 h",
+  "12 h",
+  "1 d",
+  "3 d",
+  "7 d",
+  "14 d",
+  "28 d",
+  "70 d"
+)
+
+pA <- ggplot() +
+
+  # --------------------------------------------------
+  # Batch-culture SD ribbons
+  # Suppressed from all legends.
+  # --------------------------------------------------
+  geom_ribbon(
+    data = bottle_time_plot,
+    aes(
+      x = hours_elapsed,
+      ymin = mean_doc - sd_doc,
+      ymax = mean_doc + sd_doc,
+      fill = start_ymd_factor,
+      group = interaction(
+        exp,
+        trt_lab,
+        start_ymd
+      )
+    ),
+    alpha = 0.12,
+    color = NA,
+    na.rm = TRUE,
+    show.legend = FALSE
   ) +
-  scale_fill_manual(values = method_cols, name = "Method") +
-  geom_text(
-    data = desc_pos,
-    aes(x = exp_trt, y = y_lab_neg, label = label),
-    inherit.aes = FALSE, vjust = 1, size = 3.2, parse = TRUE
+
+  # --------------------------------------------------
+  # Batch-culture mean trajectories.
+  # This is the only layer contributing to the
+  # start-date legend.
+  # --------------------------------------------------
+  geom_line(
+    data = bottle_time_plot,
+    aes(
+      x = hours_elapsed,
+      y = mean_doc,
+      color = start_ymd_factor,
+      group = interaction(
+        exp,
+        trt_lab,
+        start_ymd
+      )
+    ),
+    linewidth = 0.8,
+    show.legend = TRUE
+  ) +
+
+  # --------------------------------------------------
+  # Bottle mean points.
+  # One common circle shape; treatment is already
+  # identified in the facet labels.
+  # --------------------------------------------------
+  geom_point(
+    data = bottle_time_plot,
+    aes(
+      x = hours_elapsed,
+      y = mean_doc,
+      fill = start_ymd_factor
+    ),
+    shape = 21,
+    size = 2.2,
+    color = "black",
+    stroke = 0.4,
+    show.legend = FALSE
+  ) +
+
+  # --------------------------------------------------
+  # Bioreactor operational segments.
+  # All configurations use the same dashed connector.
+  # Endpoint shape carries the configuration meaning.
+  # --------------------------------------------------
+  geom_segment(
+    data = reactor_segments,
+    aes(
+      x = 0,
+      xend = duration_h,
+      y = initial_doc,
+      yend = final_doc,
+      group = unit_id
+    ),
+    color = "black",
+    linetype = "dashed",
+    linewidth = 1.25,
+    show.legend = FALSE
+  ) +
+
+  # --------------------------------------------------
+  # Initial bioreactor DOC points.
+  # Suppressed from legends.
+  # --------------------------------------------------
+  geom_point(
+    data = reactor_segments,
+    aes(
+      x = 0,
+      y = initial_doc,
+      fill = start_ymd_factor
+    ),
+    shape = 21,
+    size = 3.1,
+    color = "black",
+    stroke = 0.7,
+    show.legend = FALSE
+  ) +
+
+  # Begin an independent shape scale for terminal
+  # bioreactor configuration.
+  ggnewscale::new_scale("shape") +
+
+  # --------------------------------------------------
+  # Terminal bioreactor endpoints.
+  # Fill legend suppressed; shape legend retained.
+  # --------------------------------------------------
+  geom_point(
+    data = reactor_segments,
+    aes(
+      x = duration_h,
+      y = final_doc,
+      fill = start_ymd_factor,
+      shape = configuration
+    ),
+    size = 4.0,
+    color = "black",
+    stroke = 0.9,
+    show.legend = c(
+      fill = FALSE,
+      shape = TRUE
+    )
+  ) +
+
+  scale_shape_manual(
+    values = c(
+      "Single column" = 21,
+      "3-column series" = 24,
+      "5-column series" = 23
+    ),
+    name = "Bioreactor endpoint"
+  ) +
+
+  facet_wrap(
+    ~ panel_label,
+    scales = "free_y",
+    ncol = 2
+  ) +
+
+  scale_x_continuous(
+    trans = pseudo_log_trans(
+      base = 10,
+      sigma = 1
+    ),
+    breaks = time_breaks,
+    labels = time_labels,
+    guide = guide_axis(
+      check.overlap = TRUE
+    )
+  ) +
+
+  # Only this color scale produces the start-date legend.
+  scale_color_manual(
+    values = start_cols,
+    name = "Start date"
+  ) +
+
+  # Fill is used in the figure but never receives a legend.
+  scale_fill_manual(
+    values = start_cols,
+    guide = "none"
+  ) +
+
+  labs(
+    x = "Elapsed time",
+    y = expression(
+      "DOC concentration (" *
+        mu * "mol C L"^{-1} * ")"
+    )
+  ) +
+
+  guides(
+    color = guide_legend(
+      title = "Start date",
+      order = 1,
+      override.aes = list(
+        shape = NA,
+        linewidth = 1.2,
+        alpha = 1
+      )
+    ),
+
+    shape = guide_legend(
+      title = "Bioreactor endpoint",
+      order = 2,
+      override.aes = list(
+        fill = "white",
+        color = "black",
+        size = 3.6,
+        linewidth = 0
+      )
+    )
+  ) +
+
+  theme_bw(base_size = 10.5) +
+
+  theme(
+    legend.position = "bottom",
+    legend.box = "vertical",
+    legend.margin = margin(
+      t = 0,
+      r = 0,
+      b = 0,
+      l = 0
+    ),
+    legend.spacing.y = unit(2, "pt"),
+    legend.key.width = unit(18, "pt"),
+    legend.key.height = unit(12, "pt"),
+
+    panel.grid.minor = element_blank(),
+
+    strip.background = element_rect(
+      fill = "white"
+    ),
+    strip.text = element_text(
+      face = "bold"
+    ),
+
+    axis.text.x = element_text(
+      size = 9,
+      margin = margin(t = 3)
+    )
+  )
+
+pA
+```
+
+# Figure 5B: operational endpoint comparison
+
+```{r figure-5b, fig.width=11.5, fig.height=6.2}
+# Unit-level values for plotting independent bottles and bioreactors.
+plot_units <- bind_rows(
+  bottle_endpoint_units %>%
+    transmute(
+      exp, exp_lab, trt_lab, start_ymd,
+      method, configuration,
+      unit_id,
+      duration_h,
+      doc_removal
+    ),
+  bioreactor_endpoint_units %>%
+    transmute(
+      exp, exp_lab, trt_lab, start_ymd,
+      method, configuration,
+      unit_id,
+      duration_h,
+      doc_removal
+    )
+) %>%
+  mutate(
+    comparison_group = case_when(
+      exp == "BR16-1" ~ paste0(exp_lab, "\n", start_ymd),
+      TRUE ~ paste0(exp_lab, "\n", trt_lab)
+    ),
+    method_configuration = case_when(
+      method == "Batch culture" ~ "Batch culture",
+      TRUE ~ configuration
+    )
+  )
+
+summary_plot <- plot_units %>%
+  group_by(comparison_group, method_configuration) %>%
+  summarise(
+    mean_removal = mean(doc_removal, na.rm = TRUE),
+    sd_removal = safe_sd(doc_removal),
+    n_independent = n_distinct(unit_id),
+    .groups = "drop"
+  )
+
+method_levels <- c(
+  "Batch culture",
+  "Single column",
+  "3-column series",
+  "5-column series"
+)
+
+plot_units <- plot_units %>%
+  mutate(method_configuration = factor(method_configuration, levels = method_levels))
+summary_plot <- summary_plot %>%
+  mutate(method_configuration = factor(method_configuration, levels = method_levels))
+
+pd <- position_dodge(width = 0.72)
+
+pB <- ggplot(
+  summary_plot,
+  aes(
+    x = comparison_group,
+    y = mean_removal,
+    fill = method_configuration
+  )
+) +
+  geom_hline(yintercept = 0, linewidth = 0.4) +
+  geom_col(
+    position = pd,
+    width = 0.64,
+    color = "black",
+    linewidth = 0.25
+  ) +
+  geom_errorbar(
+    aes(
+      ymin = mean_removal - sd_removal,
+      ymax = mean_removal + sd_removal
+    ),
+    position = pd,
+    width = 0.14,
+    linewidth = 0.55,
+    na.rm = TRUE
+  ) +
+  geom_point(
+    data = plot_units,
+    aes(
+      x = comparison_group,
+      y = doc_removal,
+      group = method_configuration,
+      shape = method_configuration
+    ),
+    inherit.aes = FALSE,
+    position = position_jitterdodge(
+      jitter.width = 0.07,
+      jitter.height = 0,
+      dodge.width = 0.72
+    ),
+    size = 2.0,
+    alpha = 0.8
+  ) +
+  scale_fill_brewer(palette = "Set2", name = "Operational endpoint") +
+  scale_shape_manual(
+    values = c(
+      "Batch culture" = 21,
+      "Single column" = 22,
+      "3-column series" = 24,
+      "5-column series" = 25
+    ),
+    name = "Operational endpoint"
   ) +
   labs(
     x = NULL,
-    y = expression("\u2212"*Delta*DOC~"(BDOC, " * mu * "mol C L"^{-1} * " removed)")
+    y = expression("DOC removal (" * mu * "mol C L"^{-1} * ")"),
+    # caption = terminal_takeaway_text
   ) +
-  scale_y_continuous(expand = expansion(mult = c(0.15, 0.25))) +  # more space downward for labels
-  theme_bw(base_size = 11) +
+  theme_bw(base_size = 10.5) +
   theme(
-    legend.position   = "bottom",
-    axis.text.x       = element_text(angle = 18, hjust = 1),
-    panel.grid.minor  = element_blank()
-  ) +
-  coord_cartesian(clip = "off") +
-  ggtitle("(b) −BDOC by experiment × treatment (mean ± SE; descriptive Δ labels)")
-
-
-```
-
-```{r}
-library(patchwork)
-fig <- pA / pB + plot_layout(heights = c(1.25, 0.95))
-fig <- fig & theme(plot.title = element_text(face = "bold"))
-
-```
-
-```{r}
-detection_limit <- 1.5
-
-comp_tbl <- bdoc_summary %>%
-  select(exp_trt, method, mean_bdoc) %>%
-  pivot_wider(names_from = method, values_from = mean_bdoc) %>%
-  filter(is.finite(bottle), is.finite(bioreactor)) %>%
-  mutate(
-    bottle_adj = ifelse(abs(bottle) < detection_limit, NA, bottle), # treat as 0 (skip %)
-    abs_diff   = bioreactor - bottle,
-    pct_diff   = 100 * abs_diff / bottle_adj
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 20, hjust = 1),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(hjust = 0, size = 9)
   )
 
-# Overall average % difference (ignores NA where bottle < detection limit)
-overall_pct <- mean(comp_tbl$pct_diff, na.rm = TRUE)
-
-comp_tbl
-overall_pct
+pB
 ```
 
+```{r combined-figure, fig.width=12, fig.height=12}
+figure5 <- pA / pB +
+  plot_layout(heights = c(1.35, 1)) +
+  plot_annotation(tag_levels = "a")
+
+figure5
+
+ggsave(
+  "figures/Figure_5_bioreactor_batch_comparison.pdf",
+  figure5,
+  width = 12,
+  height = 12
+)
+```
+
+# Reporting tables
+
+```{r reporting-tables}
+endpoint_reporting <- bind_rows(
+  bottle_endpoint_summary %>%
+    mutate(
+      bioreactor_n = NA_real_,
+      beads = NA_character_,
+      flowrate = NA_real_
+    ),
+  bioreactor_endpoint_summary
+) %>%
+  arrange(exp, trt_lab, start_ymd, method, configuration)
+
+write_csv(
+  bottle_endpoint_units,
+  "results/bottle_endpoint_independent_units.csv"
+)
+
+write_csv(
+  bioreactor_endpoint_units,
+  "results/bioreactor_endpoint_independent_units.csv"
+)
+
+write_csv(
+  endpoint_reporting,
+  "results/bottle_bioreactor_endpoint_summary.csv"
+)
+
+write_csv(
+  comparison_table,
+  "results/bottle_bioreactor_experiment_comparisons.csv"
+)
+
+write_csv(
+  overall_pattern,
+  "results/bottle_bioreactor_overall_pattern_counts.csv"
+)
+
+write_csv(
+  terminal_comparison_table,
+  "results/bottle_bioreactor_terminal_endpoint_comparisons.csv"
+)
+
+write_csv(
+  terminal_pattern,
+  "results/bottle_bioreactor_terminal_pattern_counts.csv"
+)
+
+write_csv(
+  br16_3_24h,
+  "results/BR16_3_bottle_24h_individual.csv"
+)
+
+write_csv(
+  br16_3_24h_summary,
+  "results/BR16_3_bottle_24h_summary.csv"
+)
+
+comparison_table
+overall_pattern
+terminal_comparison_table
+terminal_pattern
+terminal_takeaway_text
+br16_3_24h_summary
+```

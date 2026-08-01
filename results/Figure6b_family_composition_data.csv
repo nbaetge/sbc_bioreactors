@@ -1,0 +1,81 @@
+sample_id,sample_group,bead_position,bioreactor,Phylum,Family_plot,relative_abundance
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Bottom,10,Planctomycetota,Gimesiaceae,0.011715846994535518
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Bottom,10,Planctomycetota,Incertae sedis (Planctomycetota),0.026863387978142077
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Bottom,10,Planctomycetota,Other Planctomycetota families,6.994535519125683e-4
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Bottom,10,Planctomycetota,Phycisphaeraceae,0.004961748633879781
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Bottom,10,Planctomycetota,Pirellulaceae,0.1153879781420765
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Bottom,10,Planctomycetota,Rubinisphaeraceae,0.05702732240437158
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Bottom,10,Planctomycetota,Unclassified family,0.02137704918032787
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Bottom,10,Thermoproteota,Nitrosopumilaceae_2,0.11490710382513661
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Top,10,Planctomycetota,Gimesiaceae,0.008138799232229215
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Top,10,Planctomycetota,Incertae sedis (Planctomycetota),0.022357571013435988
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Top,10,Planctomycetota,Other Planctomycetota families,0
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Top,10,Planctomycetota,Phycisphaeraceae,0.0029488403015323246
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Top,10,Planctomycetota,Pirellulaceae,0.1335127657977417
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Top,10,Planctomycetota,Rubinisphaeraceae,0.035911513344842744
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Top,10,Planctomycetota,Unclassified family,0.0639951960710724
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Top,10,Thermoproteota,Nitrosopumilaceae_2,0.02473808936594572
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Bottom,5,Planctomycetota,Gimesiaceae,0.010283901318308626
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Bottom,5,Planctomycetota,Incertae sedis (Planctomycetota),0.039312218514669144
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Bottom,5,Planctomycetota,Other Planctomycetota families,3.6467735171307185e-4
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Bottom,5,Planctomycetota,Phycisphaeraceae,0.007585288915631895
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Bottom,5,Planctomycetota,Pirellulaceae,0.13037215323742318
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Bottom,5,Planctomycetota,Rubinisphaeraceae,0.03588425140856627
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Bottom,5,Planctomycetota,Unclassified family,0.02527214047371588
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Bottom,5,Thermoproteota,Nitrosopumilaceae_2,0.12440967853691447
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Top,5,Planctomycetota,Gimesiaceae,0.005227007646118623
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Top,5,Planctomycetota,Incertae sedis (Planctomycetota),0.029504514233876195
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Top,5,Planctomycetota,Other Planctomycetota families,0
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Top,5,Planctomycetota,Phycisphaeraceae,0.00982763834290898
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Top,5,Planctomycetota,Pirellulaceae,0.16394876668538597
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Top,5,Planctomycetota,Rubinisphaeraceae,0.03548749406021858
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Top,5,Planctomycetota,Unclassified family,0.02592984578167523
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Top,5,Thermoproteota,Nitrosopumilaceae_2,0.06234610566331159
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Bottom,6,Planctomycetota,Gimesiaceae,9.584787026032282e-5
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Bottom,6,Planctomycetota,Incertae sedis (Planctomycetota),0.016409155388567267
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Bottom,6,Planctomycetota,Other Planctomycetota families,0
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Bottom,6,Planctomycetota,Phycisphaeraceae,0.003642219069892267
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Bottom,6,Planctomycetota,Pirellulaceae,0.08423110838477169
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Bottom,6,Planctomycetota,Rubinisphaeraceae,0.31658551546984626
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Bottom,6,Planctomycetota,Unclassified family,0.00895219108231415
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Bottom,6,Thermoproteota,Nitrosopumilaceae_2,0.06552160410995668
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Top,6,Planctomycetota,Gimesiaceae,0.011655696599279109
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Top,6,Planctomycetota,Incertae sedis (Planctomycetota),0.035437235543018336
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Top,6,Planctomycetota,Other Planctomycetota families,0
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Top,6,Planctomycetota,Phycisphaeraceae,0.01181241184767278
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Top,6,Planctomycetota,Pirellulaceae,0.12492164237580317
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Top,6,Planctomycetota,Rubinisphaeraceae,0.02771900955963015
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Top,6,Planctomycetota,Unclassified family,0.026622002820874468
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Top,6,Thermoproteota,Nitrosopumilaceae_2,0.08272606174580786
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Bottom,8,Planctomycetota,Gimesiaceae,0.011591387404889105
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Bottom,8,Planctomycetota,Incertae sedis (Planctomycetota),0.020624898818196534
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Bottom,8,Planctomycetota,Other Planctomycetota families,7.770762506070908e-4
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Bottom,8,Planctomycetota,Phycisphaeraceae,0.008709729642221144
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Bottom,8,Planctomycetota,Pirellulaceae,0.1674923101829367
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Bottom,8,Planctomycetota,Rubinisphaeraceae,0.031018293670066376
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Bottom,8,Planctomycetota,Unclassified family,0.02693864335437915
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Bottom,8,Thermoproteota,Nitrosopumilaceae_2,0.11921644811397118
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Top,8,Planctomycetota,Gimesiaceae,0.010056307008248664
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Top,8,Planctomycetota,Incertae sedis (Planctomycetota),0.022730578237652975
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Top,8,Planctomycetota,Other Planctomycetota families,0
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Top,8,Planctomycetota,Phycisphaeraceae,0.008020112614016497
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Top,8,Planctomycetota,Pirellulaceae,0.14527623678031956
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Top,8,Planctomycetota,Rubinisphaeraceae,0.02476677263188514
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Top,8,Planctomycetota,Unclassified family,0.039685013193708575
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Top,8,Thermoproteota,Nitrosopumilaceae_2,0.05535124353300505
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Bottom,9,Planctomycetota,Gimesiaceae,0.009969340322421125
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Bottom,9,Planctomycetota,Incertae sedis (Planctomycetota),0.02644644446642271
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Bottom,9,Planctomycetota,Other Planctomycetota families,5.34071802986846e-4
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Bottom,9,Planctomycetota,Phycisphaeraceae,0.005162694095539512
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Bottom,9,Planctomycetota,Pirellulaceae,0.15958856690732864
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Bottom,9,Planctomycetota,Rubinisphaeraceae,0.02239145485115221
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Bottom,9,Planctomycetota,Unclassified family,0.02363762239145485
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Bottom,9,Thermoproteota,Nitrosopumilaceae_2,0.10121649688458115
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Top,9,Planctomycetota,Gimesiaceae,0.0314131453304181
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Top,9,Planctomycetota,Incertae sedis (Planctomycetota),0.029092856186694036
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Top,9,Planctomycetota,Other Planctomycetota families,0
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Top,9,Planctomycetota,Phycisphaeraceae,0.008344116728392307
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Top,9,Planctomycetota,Pirellulaceae,0.10343135067600731
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Top,9,Planctomycetota,Rubinisphaeraceae,0.018249966534291198
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Top,9,Planctomycetota,Unclassified family,0.05809647048324484
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Top,9,Thermoproteota,Nitrosopumilaceae_2,0.0690286020257909

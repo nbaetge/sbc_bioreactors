@@ -6,8 +6,6 @@ output: github_document
 ---
 
 
-# Install phyloseq
-
 ```{r}
 # if (!requireNamespace("BiocManager", quietly = TRUE))
 #     install.packages("BiocManager")
@@ -16,787 +14,3321 @@ output: github_document
 # BiocManager::install("dendextend")
 ```
 
+```{r}
+# ============================================================
+# Stage 1: Import, synchronize, and audit community data
+# ============================================================
 
-```{r load packages, message=FALSE, warning=FALSE}
-library(tidyverse) ; packageVersion("tidyverse") # 2.0.0
-library(phyloseq) ; packageVersion("phyloseq") # 1.52.0
-library(vegan) ; packageVersion("vegan") # 2.7.1
-library(DESeq2) ; packageVersion("DESeq2") # 1.48.2
-library(dendextend) ; packageVersion("dendextend") # 1.19.1
-library(viridis) ; packageVersion("viridis") # 0.6.5
-```
+library(tidyverse)
+library(phyloseq)
+library(vegan)
+library(DESeq2)
 
-# Import Data 
+# ------------------------------------------------------------
+# 1. File paths
+# ------------------------------------------------------------
 
-```{r message = F}
-# Paths (adjust if needed)
 counts_fp  <- "~/github/sbc_bioreactors/data/dada2_output/ASVs_counts-no-contam.tsv"
 tax_fp     <- "~/github/sbc_bioreactors/data/dada2_output/ASVs_taxonomy-no-contam.tsv"
 sample_fp  <- "~/github/sbc_bioreactors/data/sampleinfo.txt"
 
-# Counts: rows = ASVs, cols = samples. Drop blank column if present.
-count_tab <- read.table(counts_fp, header = TRUE, row.names = 1, check.names = FALSE, sep = "\t")
-if (ncol(count_tab) >= 18) {
-  # Keep your original behavior; drop col 18 if it's a known blank
-  count_tab <- count_tab[, -c(18)]
+# Use full project paths instead if the files are elsewhere.
+stopifnot(
+  file.exists(counts_fp),
+  file.exists(tax_fp),
+  file.exists(sample_fp)
+)
+
+# ------------------------------------------------------------
+# 2. Import raw tables
+# ------------------------------------------------------------
+
+count_tab <- read.delim(
+  counts_fp,
+  row.names = 1,
+  check.names = FALSE,
+  stringsAsFactors = FALSE
+)
+
+tax_tab <- read.delim(
+  tax_fp,
+  row.names = 1,
+  check.names = FALSE,
+  stringsAsFactors = FALSE
+)
+
+sample_info <- read.delim(
+  sample_fp,
+  row.names = 1,
+  check.names = FALSE,
+  stringsAsFactors = FALSE
+)
+
+# Convert taxonomy to a matrix for phyloseq.
+tax_mat <- as.matrix(tax_tab)
+
+# ------------------------------------------------------------
+# 3. Basic orientation checks
+# ------------------------------------------------------------
+
+cat("Raw dimensions\n")
+cat("  Count table:", nrow(count_tab), "ASVs x",
+    ncol(count_tab), "samples\n")
+cat("  Taxonomy table:", nrow(tax_mat), "ASVs x",
+    ncol(tax_mat), "ranks\n")
+cat("  Metadata table:", nrow(sample_info), "samples x",
+    ncol(sample_info), "variables\n\n")
+
+# ASVs should be rows and samples should be columns.
+n_sample_matches_columns <- sum(
+  colnames(count_tab) %in% rownames(sample_info)
+)
+
+n_sample_matches_rows <- sum(
+  rownames(count_tab) %in% rownames(sample_info)
+)
+
+cat("Metadata IDs matching count-table columns:",
+    n_sample_matches_columns, "\n")
+cat("Metadata IDs matching count-table rows:",
+    n_sample_matches_rows, "\n\n")
+
+if (n_sample_matches_rows > n_sample_matches_columns) {
+  message("Transposing count table because samples appear to be rows.")
+  count_tab <- as.data.frame(t(count_tab), check.names = FALSE)
 }
 
-# Taxonomy: rows = ASVs, columns = ranks
-tax_tab <- as.matrix(read.table(tax_fp, header = TRUE, row.names = 1, check.names = FALSE, sep = "\t"))
+# Confirm that counts are numeric.
+count_tab[] <- lapply(count_tab, function(x) {
+  as.numeric(as.character(x))
+})
 
-# Sample metadata: rows = samples (ordered in your preferred plotting order)
-sample_info_tab <- read.table(sample_fp, header = TRUE, row.names = 1, check.names = FALSE, sep = "\t")
-sample_info_tab$color <- as.character(sample_info_tab$color)
+count_mat <- as.matrix(count_tab)
+storage.mode(count_mat) <- "numeric"
 
-# Ensure sample order in metadata propagates everywhere
-sample_info_tab <- sample_info_tab[rownames(sample_info_tab), , drop = FALSE]
-
-# Synchronize objects (drop any mismatches)
-# Preserve sample order from sample_info_tab
-desired_order <- rownames(sample_info_tab)
-
-# Keep only samples that appear in both tables, but in the order of sample_info_tab
-keep <- desired_order[desired_order %in% colnames(count_tab)]
-
-# Optionally warn if anything is being dropped
-dropped_from_meta  <- setdiff(desired_order, keep)
-dropped_from_counts <- setdiff(colnames(count_tab), keep)
-if (length(dropped_from_meta))   message("Dropping from metadata (not in counts): ", paste(dropped_from_meta, collapse = ", "))
-if (length(dropped_from_counts)) message("Dropping from counts (not in metadata order): ", paste(dropped_from_counts, collapse = ", "))
-
-# Reorder/prune to matched set, preserving order from sample_info_tab
-count_tab       <- count_tab[, keep, drop = FALSE]
-sample_info_tab <- sample_info_tab[keep, , drop = FALSE]
-
-# Build phyloseq objects
-count_tab_phy <- otu_table(count_tab, taxa_are_rows = TRUE)
-tax_tab_phy   <- tax_table(tax_tab)
-sample_tab_phy <- sample_data(sample_info_tab)
-ASV_physeq    <- phyloseq(count_tab_phy, tax_tab_phy, sample_tab_phy)
-
-# A quick peek
-head(sample_info_tab)
-```
-
-
-# Normalize for sample depth
-
-```{r}
-# DESeq2 VST (poscounts to handle zeros)
-deseq_counts <- DESeqDataSetFromMatrix(count_tab, colData = sample_info_tab, design = ~ dna_type)
-deseq_counts <- estimateSizeFactors(deseq_counts, type = "poscounts")
-deseq_counts_vst <- varianceStabilizingTransformation(deseq_counts)
-
-vst_trans_count_tab <- assay(deseq_counts_vst)
-euc_dist <- dist(t(vst_trans_count_tab))
-```
-
-
-# Hierarchial clustering
-
-```{r}
-euc_clust <- hclust(euc_dist, method = "ward.D2")
-plot(euc_clust, main = "Hierarchical clustering (VST Euclidean)", xlab = "", sub = "")
-
-euc_dend <- as.dendrogram(euc_clust, hang = 0.1)
-dend_cols <- as.character(sample_info_tab$color[order.dendrogram(euc_dend)])
-labels_colors(euc_dend) <- dend_cols
-plot(euc_dend, ylab = "VST Euclidean distance")
-```
-
-# Ordination
-
-```{r}
-  # making our phyloseq object with transformed table
-vst_count_phy <- otu_table(vst_trans_count_tab, taxa_are_rows = TRUE)
-vst_physeq    <- phyloseq(vst_count_phy, sample_tab_phy)
-
-vst_pcoa <- ordinate(vst_physeq, method = "MDS", distance = "euclidean")
-eigen_vals <- vst_pcoa$values$Eigenvalues
-
-plot_ordination(vst_physeq, vst_pcoa, color = "dna_location") +
-  geom_point(size = 1) +
-  geom_text(aes(label = rownames(sample_info_tab), hjust = 0.3, vjust = -0.4)) +
-  coord_fixed(sqrt(eigen_vals[2]/eigen_vals[1])) +
-  ggtitle("PCoA (VST Euclidean)") +
-  scale_color_manual(values = unique(sample_info_tab$color[order(sample_info_tab$dna_type)])) +
-  theme_bw() + theme(legend.position = "none")
-```
-
-# Rarefaction curves
-
-```{r}
-rarecurve(t(count_tab), step = 100, col = sample_info_tab$color, lwd = 2,
-          ylab = "ASVs", label = FALSE)
-abline(v = (min(rowSums(t(count_tab)))))
-```
-
-# Richness and diversity
-
-
-```{r}
-plot_richness(ASV_physeq, color = "dna_location", measures = c("Chao1", "Shannon")) +
-  scale_color_manual(values = unique(sample_info_tab$color[order(sample_info_tab$dna_location)])) +
-  theme_bw() + theme(legend.title = element_blank(),
-                     axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
-
-plot_richness(ASV_physeq, x = "dna_type", color = "dna_location",
-              measures = c("Chao1", "Shannon")) +
-  scale_color_manual(values = unique(sample_info_tab$color[order(sample_info_tab$dna_location)])) +
-  theme_bw() + theme(legend.title = element_blank(),
-                     axis.text.x = element_text(angle = 90, vjust = 0))
-```
-```{r}
-strip_fastq <- function(x) sub("\\.fastq$", "", x, ignore.case = TRUE)
-
-# 1) Richness table
-er <- phyloseq::estimate_richness(ASV_physeq, measures = c("Chao1","Shannon")) %>%
-  tibble::rownames_to_column("sample_id_er") %>%
-  mutate(
-    stem_er   = strip_fastq(sample_id_er),
-    key_dash  = gsub("\\.", "-", stem_er)   # undo phyloseq's dotting of '-'
+if (anyNA(count_mat)) {
+  stop(
+    "NA values were introduced while converting the count table ",
+    "to numeric. Inspect the input file."
   )
-
-# 2) Metadata from the original 17-row table (NOT from sample_data(ASV_physeq))
-meta_full <- sample_info_tab %>%
-  as.data.frame() %>%
-  tibble::rownames_to_column("sample_id_meta") %>%
-  mutate(
-    stem_meta = strip_fastq(sample_id_meta),
-    # if metadata already used '-', keep; if it had dots, normalize to '-'
-    key_dash  = gsub("\\.", "-", stem_meta)
-  )
-
-# 3) Join on normalized dash key
-div_tab <- er %>% left_join(meta_full, by = "key_dash")
-
-msg_unmatched <- sum(is.na(div_tab$sample_id_meta))
-if (msg_unmatched > 0) {
-  warning("Unmatched richness rows after join: ", msg_unmatched)
-  print(div_tab %>% filter(is.na(sample_id_meta)) %>% select(sample_id_er, key_dash))
 }
 
-# 4) Clean factors and pivot
-div_tab <- div_tab %>%
+if (any(count_mat < 0)) {
+  stop("Negative values detected in the ASV count table.")
+}
+
+# ------------------------------------------------------------
+# 4. Synchronize ASVs between counts and taxonomy
+# ------------------------------------------------------------
+
+shared_asvs <- intersect(
+  rownames(count_mat),
+  rownames(tax_mat)
+)
+
+counts_only_asvs <- setdiff(
+  rownames(count_mat),
+  rownames(tax_mat)
+)
+
+taxonomy_only_asvs <- setdiff(
+  rownames(tax_mat),
+  rownames(count_mat)
+)
+
+cat("ASV synchronization\n")
+cat("  Shared ASVs:", length(shared_asvs), "\n")
+cat("  Count-only ASVs:", length(counts_only_asvs), "\n")
+cat("  Taxonomy-only ASVs:", length(taxonomy_only_asvs), "\n\n")
+
+if (length(shared_asvs) == 0) {
+  stop("No ASV identifiers are shared between counts and taxonomy.")
+}
+
+count_mat <- count_mat[shared_asvs, , drop = FALSE]
+tax_mat   <- tax_mat[shared_asvs, , drop = FALSE]
+
+# ------------------------------------------------------------
+# 5. Synchronize samples between counts and metadata
+# ------------------------------------------------------------
+
+shared_samples <- intersect(
+  rownames(sample_info),
+  colnames(count_mat)
+)
+
+metadata_only_samples <- setdiff(
+  rownames(sample_info),
+  colnames(count_mat)
+)
+
+counts_only_samples <- setdiff(
+  colnames(count_mat),
+  rownames(sample_info)
+)
+
+cat("Sample synchronization\n")
+cat("  Shared samples:", length(shared_samples), "\n")
+cat("  Metadata-only samples:", length(metadata_only_samples), "\n")
+cat("  Count-only samples:", length(counts_only_samples), "\n\n")
+
+if (length(metadata_only_samples) > 0) {
+  cat(
+    "Metadata-only sample IDs:\n",
+    paste(metadata_only_samples, collapse = "\n"),
+    "\n\n"
+  )
+}
+
+if (length(counts_only_samples) > 0) {
+  cat(
+    "Count-only sample IDs:\n",
+    paste(counts_only_samples, collapse = "\n"),
+    "\n\n"
+  )
+}
+
+if (length(shared_samples) == 0) {
+  stop("No sample identifiers are shared between counts and metadata.")
+}
+
+# Preserve the curated order in the metadata file.
+shared_samples <- rownames(sample_info)[
+  rownames(sample_info) %in% shared_samples
+]
+
+count_mat  <- count_mat[, shared_samples, drop = FALSE]
+sample_info <- sample_info[shared_samples, , drop = FALSE]
+
+stopifnot(
+  identical(colnames(count_mat), rownames(sample_info))
+)
+
+# ------------------------------------------------------------
+# 6. Remove empty ASVs and empty samples, if any
+# ------------------------------------------------------------
+
+empty_asvs <- rowSums(count_mat) == 0
+empty_samples <- colSums(count_mat) == 0
+
+cat("Empty features and samples\n")
+cat("  Empty ASVs:", sum(empty_asvs), "\n")
+cat("  Empty samples:", sum(empty_samples), "\n\n")
+
+if (any(empty_asvs)) {
+  count_mat <- count_mat[!empty_asvs, , drop = FALSE]
+  tax_mat   <- tax_mat[rownames(count_mat), , drop = FALSE]
+}
+
+if (any(empty_samples)) {
+  removed_empty_samples <- colnames(count_mat)[empty_samples]
+
+  warning(
+    "Removing empty samples: ",
+    paste(removed_empty_samples, collapse = ", ")
+  )
+
+  count_mat <- count_mat[, !empty_samples, drop = FALSE]
+  sample_info <- sample_info[
+    colnames(count_mat),
+    ,
+    drop = FALSE
+  ]
+}
+
+# ------------------------------------------------------------
+# 7. Create clearer analysis variables
+# ------------------------------------------------------------
+
+sample_info <- sample_info %>%
   mutate(
-    # prefer metadata's ID when present; fall back to richness ID
-    sample_id   = coalesce(sample_id_meta, sample_id_er),
-    dna_type    = factor(dna_type, levels = c("beads","water"), labels = c("Beads","Water")),
-    dna_location= factor(dna_location, levels = c("0cm","70cm","bottle","outflow"),
-                         labels = c("0 cm","70 cm","Bottle","Outflow"))
+    sample_id = rownames(.),
+
+    sample_material = case_when(
+      dna_type == "beads" ~ "Beads",
+      dna_type == "water" & dna_location == "outflow" ~ "Effluent",
+      dna_type == "water" & dna_location == "bottle" ~ "Batch culture water",
+      TRUE ~ "Other"
+    ),
+
+    bead_position = case_when(
+      dna_type == "beads" & dna_location == "0cm"  ~ "Bottom",
+      dna_type == "beads" & dna_location == "70cm" ~ "Top",
+      TRUE ~ NA_character_
+    ),
+
+    treatment = case_when(
+      trt %in% c("0m", "0 m", "Ambient", "ambient") ~ "Ambient",
+      trt %in% c(
+        "DiatomLysate",
+        "Diatom lysate",
+        "diatom lysate"
+      ) ~ "Diatom lysate",
+      TRUE ~ as.character(trt)
+    ),
+
+    incubation_stage = case_when(
+      sample_material == "Batch culture water" &
+        hours_elapsed == 0 ~ "Batch T0",
+
+      sample_material == "Batch culture water" &
+        hours_elapsed > 0 ~ "Batch 96 h",
+
+      sample_material == "Effluent" ~ "Bioreactor effluent",
+
+      sample_material == "Beads" &
+        bead_position == "Bottom" ~ "Beads — bottom",
+
+      sample_material == "Beads" &
+        bead_position == "Top" ~ "Beads — top",
+
+      TRUE ~ "Other"
+    )
   ) %>%
-  select(sample_id, Chao1, Shannon, dna_type, dna_location) %>%
-  pivot_longer(c(Chao1, Shannon), names_to = "measure", values_to = "value") %>%
-  drop_na(dna_type, dna_location, value)
+  as.data.frame()
 
-# 5) Labels and palette
+rownames(sample_info) <- sample_info$sample_id
+
+# Explicit factor ordering for subsequent analyses and plots.
+sample_info$sample_material <- factor(
+  sample_info$sample_material,
+  levels = c(
+    "Batch culture water",
+    "Effluent",
+    "Beads"
+  )
+)
+
+sample_info$bead_position <- factor(
+  sample_info$bead_position,
+  levels = c("Bottom", "Top")
+)
+
+sample_info$treatment <- factor(
+  sample_info$treatment,
+  levels = c("Ambient", "Diatom lysate")
+)
+
+sample_info$incubation_stage <- factor(
+  sample_info$incubation_stage,
+  levels = c(
+    "Batch T0",
+    "Batch 96 h",
+    "Bioreactor effluent",
+    "Beads — bottom",
+    "Beads — top"
+  )
+)
+
+# ------------------------------------------------------------
+# 8. Construct phyloseq object
+# ------------------------------------------------------------
+
+ASV_physeq <- phyloseq(
+  otu_table(count_mat, taxa_are_rows = TRUE),
+  tax_table(tax_mat),
+  sample_data(sample_info)
+)
+
+cat("Final phyloseq dimensions\n")
+cat("  Samples:", nsamples(ASV_physeq), "\n")
+cat("  ASVs:", ntaxa(ASV_physeq), "\n\n")
+
+# ------------------------------------------------------------
+# 9. Sample inventory
+# ------------------------------------------------------------
+
+sample_inventory <- sample_info %>%
+  tibble::as_tibble() %>%
+  dplyr::count(
+    sample_material,
+    incubation_stage,
+    treatment,
+    name = "n_samples",
+    .drop = FALSE
+  ) %>%
+  dplyr::filter(n_samples > 0) %>%
+  dplyr::arrange(
+    sample_material,
+    incubation_stage,
+    treatment
+  )
+
+print(sample_inventory, n = Inf)
+
+# Detailed inventory for checking sample identities.
+sample_inventory_detailed <- sample_info |>
+  tibble::as_tibble() |>
+  dplyr::select(
+    sample_id,
+    sample_material,
+    incubation_stage,
+    treatment,
+    bead_position,
+    bioreactor,
+    bottle,
+    hours_elapsed
+  )
+
+print(sample_inventory_detailed, n = Inf)
+
+# ------------------------------------------------------------
+# 10. Sequencing-depth audit
+# ------------------------------------------------------------
+
+library_sizes <- tibble(
+  sample_id = sample_names(ASV_physeq),
+  library_size = sample_sums(ASV_physeq)
+) %>%
+  left_join(
+    sample_info %>%
+      rownames_to_column("sample_id_join") %>%
+      select(
+        sample_id_join,
+        sample_material,
+        incubation_stage,
+        treatment,
+        bead_position,
+        bioreactor,
+        bottle
+      ),
+    by = c("sample_id" = "sample_id_join")
+  ) %>%
+  arrange(library_size)
+
+print(library_sizes, n = Inf)
+
+cat("\nLibrary-size summary\n")
+print(
+  library_sizes %>%
+    summarise(
+      n_samples = n(),
+      minimum = min(library_size),
+      first_quartile = quantile(library_size, 0.25),
+      median = median(library_size),
+      mean = mean(library_size),
+      third_quartile = quantile(library_size, 0.75),
+      maximum = max(library_size)
+    )
+)
+
+# Plot library sizes on a log10 scale.
+p_library_size <- ggplot(
+  library_sizes,
+  aes(
+    x = reorder(sample_id, library_size),
+    y = library_size,
+    fill = incubation_stage
+  )
+) +
+  geom_col(color = "black", linewidth = 0.25) +
+  scale_y_log10(
+    labels = scales::label_comma()
+  ) +
+  coord_flip() +
+  labs(
+    x = NULL,
+    y = "16S rRNA gene reads",
+    fill = "Sample group"
+  ) +
+  theme_bw(base_size = 10.5) +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position = "bottom"
+  )
+
+p_library_size
+
+# ------------------------------------------------------------
+# 11. Replication available for candidate comparisons
+# ------------------------------------------------------------
+
+comparison_inventory <- dplyr::bind_rows(
+
+  sample_info %>%
+    tibble::as_tibble() %>%
+    dplyr::filter(sample_material == "Beads") %>%
+    dplyr::count(
+      comparison = "Bottom versus top beads",
+      group = bead_position,
+      name = "n"
+    ),
+
+  sample_info %>%
+    tibble::as_tibble() %>%
+    dplyr::filter(
+      sample_material %in% c(
+        "Beads",
+        "Batch culture water",
+        "Effluent"
+      )
+    ) %>%
+    dplyr::count(
+      comparison = "Sample material",
+      group = sample_material,
+      name = "n"
+    ),
+
+  sample_info %>%
+    tibble::as_tibble() %>%
+    dplyr::filter(sample_material == "Batch culture water") %>%
+    dplyr::mutate(
+      comparison = "Batch treatment and time",
+      group = interaction(
+        treatment,
+        hours_elapsed,
+        sep = " — ",
+        drop = TRUE
+      )
+    ) %>%
+    dplyr::count(
+      comparison,
+      group,
+      name = "n"
+    )
+)
+
+comparison_inventory <- tibble::as_tibble(comparison_inventory)
+
+print(comparison_inventory, n = Inf)
+
+# ------------------------------------------------------------
+# 12. Export audit tables
+# ------------------------------------------------------------
+
+dir.create("results", showWarnings = FALSE)
+
+write_csv(
+  sample_inventory,
+  "results/community_sample_inventory.csv"
+)
+
+write_csv(
+  sample_inventory_detailed,
+  "results/community_sample_inventory_detailed.csv"
+)
+
+write_csv(
+  library_sizes,
+  "results/community_library_sizes.csv"
+)
+
+write_csv(
+  comparison_inventory,
+  "results/community_comparison_inventory.csv"
+)
+```
+
+
+```{r}
+ # ============================================================
+# Stage 2: Alpha diversity
+#
+# Notes:
+# - The filtered ASV table contains no singletons.
+# - Therefore, richness estimators are not interpreted as
+#   unbiased estimates of total richness.
+# - Shannon and Simpson diversity are the primary metrics.
+# - "Retained ASVs" is reported descriptively as the number
+#   of ASVs remaining after the applied filtering pipeline.
+# - Bottom-versus-top bead comparisons use the five paired
+#   bioreactors as the independent experimental units.
+# ============================================================
+
+# ------------------------------------------------------------
+# 1. Calculate Shannon and Simpson diversity
+# ------------------------------------------------------------
+
+alpha_diversity <- phyloseq::estimate_richness(
+  ASV_physeq,
+  measures = c(
+    "Shannon",
+    "Simpson"
+  )
+) %>%
+  tibble::rownames_to_column("sample_id") %>%
+  tibble::as_tibble()
+
+# ------------------------------------------------------------
+# 2. Calculate number of retained ASVs per sample
+#
+# This is descriptive only. It is not interpreted as an
+# unbiased richness estimate because the ASV table has already
+# undergone low-abundance filtering and contains no singletons.
+# ------------------------------------------------------------
+
+otu_mat <- as(
+  phyloseq::otu_table(ASV_physeq),
+  "matrix"
+)
+
+if (phyloseq::taxa_are_rows(ASV_physeq)) {
+
+  retained_asvs <- tibble::tibble(
+    sample_id = colnames(otu_mat),
+    retained_asvs = colSums(otu_mat > 0)
+  )
+
+} else {
+
+  retained_asvs <- tibble::tibble(
+    sample_id = rownames(otu_mat),
+    retained_asvs = rowSums(otu_mat > 0)
+  )
+}
+
+# ------------------------------------------------------------
+# 3. Join metadata and library size
+# ------------------------------------------------------------
+
+sample_metadata_alpha <- sample_info %>%
+  tibble::rownames_to_column("sample_id_join") %>%
+  tibble::as_tibble() %>%
+  dplyr::select(
+    sample_id_join,
+    sample_material,
+    incubation_stage,
+    treatment,
+    bead_position,
+    bioreactor,
+    bottle,
+    hours_elapsed
+  )
+
+alpha_diversity <- alpha_diversity %>%
+  dplyr::left_join(
+    retained_asvs,
+    by = "sample_id"
+  ) %>%
+  dplyr::left_join(
+    sample_metadata_alpha,
+    by = c(
+      "sample_id" = "sample_id_join"
+    )
+  ) %>%
+  dplyr::left_join(
+    library_sizes %>%
+      tibble::as_tibble() %>%
+      dplyr::select(
+        sample_id,
+        library_size
+      ),
+    by = "sample_id"
+  ) %>%
+  dplyr::mutate(
+    sample_group = dplyr::case_when(
+      sample_material == "Batch culture water" &
+        hours_elapsed == 0 ~
+        "Batch T0",
+
+      sample_material == "Batch culture water" &
+        hours_elapsed > 0 ~
+        "Batch 96 h",
+
+      sample_material == "Effluent" ~
+        "Bioreactor effluent",
+
+      sample_material == "Beads" &
+        bead_position == "Bottom" ~
+        "Beads — bottom",
+
+      sample_material == "Beads" &
+        bead_position == "Top" ~
+        "Beads — top",
+
+      TRUE ~ "Other"
+    ),
+
+    sample_group = factor(
+      sample_group,
+      levels = c(
+        "Batch T0",
+        "Batch 96 h",
+        "Bioreactor effluent",
+        "Beads — bottom",
+        "Beads — top"
+      )
+    ),
+
+    bead_position = factor(
+      bead_position,
+      levels = c(
+        "Bottom",
+        "Top"
+      )
+    )
+  ) %>%
+  tibble::as_tibble()
+
+# Inspect complete alpha-diversity table.
+print(
+  alpha_diversity %>%
+    dplyr::select(
+      sample_id,
+      sample_group,
+      bioreactor,
+      retained_asvs,
+      Shannon,
+      Simpson,
+      library_size
+    ),
+  n = Inf
+)
+
+# ------------------------------------------------------------
+# 4. Diagnostic relationships with sequencing depth
+#
+# These tests assess whether the retained alpha-diversity
+# metrics remain associated with sequencing depth.
+# ------------------------------------------------------------
+
+run_spearman_test <- function(data, response_variable) {
+
+  complete_data <- data %>%
+    dplyr::filter(
+      is.finite(.data[[response_variable]]),
+      is.finite(library_size)
+    )
+
+  test_result <- stats::cor.test(
+    x = complete_data[[response_variable]],
+    y = complete_data$library_size,
+    method = "spearman",
+    exact = FALSE
+  )
+
+  tibble::tibble(
+    metric = response_variable,
+    n_samples = nrow(complete_data),
+    spearman_rho = unname(
+      test_result$estimate
+    ),
+    p_value = test_result$p.value
+  )
+}
+
+alpha_depth_tests <- dplyr::bind_rows(
+  run_spearman_test(
+    alpha_diversity,
+    "retained_asvs"
+  ),
+  run_spearman_test(
+    alpha_diversity,
+    "Shannon"
+  ),
+  run_spearman_test(
+    alpha_diversity,
+    "Simpson"
+  )
+) %>%
+  dplyr::mutate(
+    p_adjusted_bh = stats::p.adjust(
+      p_value,
+      method = "BH"
+    )
+  )
+
+print(alpha_depth_tests, n = Inf)
+
+# ------------------------------------------------------------
+# 5. Prepare paired bottom-versus-top bead data
+# ------------------------------------------------------------
+
+bead_alpha <- alpha_diversity %>%
+  dplyr::filter(
+    sample_material == "Beads",
+    !is.na(bead_position),
+    !is.na(bioreactor)
+  ) %>%
+  dplyr::mutate(
+    bioreactor = factor(bioreactor)
+  ) %>%
+  tibble::as_tibble()
+
+# Verify that each bioreactor contributes one bottom and one
+# top bead sample.
+bead_pair_check <- bead_alpha %>%
+  dplyr::count(
+    bioreactor,
+    bead_position,
+    name = "n_samples",
+    .drop = FALSE
+  ) %>%
+  tibble::as_tibble()
+
+print(bead_pair_check, n = Inf)
+
+incomplete_pairs <- bead_pair_check %>%
+  dplyr::filter(n_samples != 1)
+
+if (nrow(incomplete_pairs) > 0) {
+  warning(
+    "At least one bioreactor does not contain exactly one ",
+    "bottom and one top bead sample."
+  )
+}
+
+# ------------------------------------------------------------
+# 6. Convert paired bead data to long format
+# ------------------------------------------------------------
+
+bead_alpha_long <- bead_alpha %>%
+  dplyr::select(
+    sample_id,
+    bioreactor,
+    bead_position,
+    retained_asvs,
+    Shannon,
+    Simpson
+  ) %>%
+  tidyr::pivot_longer(
+    cols = c(
+      retained_asvs,
+      Shannon,
+      Simpson
+    ),
+    names_to = "metric",
+    values_to = "value"
+  ) %>%
+  dplyr::mutate(
+    metric = factor(
+      metric,
+      levels = c(
+        "retained_asvs",
+        "Shannon",
+        "Simpson"
+      )
+    )
+  ) %>%
+  tibble::as_tibble()
+
+# ------------------------------------------------------------
+# 7. Descriptive summaries by bead position
+# ------------------------------------------------------------
+
+bead_alpha_summary <- bead_alpha_long %>%
+  dplyr::group_by(
+    metric,
+    bead_position
+  ) %>%
+  dplyr::summarise(
+    n_bioreactors = dplyr::n(),
+    mean = mean(
+      value,
+      na.rm = TRUE
+    ),
+    sd = stats::sd(
+      value,
+      na.rm = TRUE
+    ),
+    median = stats::median(
+      value,
+      na.rm = TRUE
+    ),
+    minimum = min(
+      value,
+      na.rm = TRUE
+    ),
+    maximum = max(
+      value,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  ) %>%
+  tibble::as_tibble()
+
+
+print(bead_alpha_summary, n = Inf)
+
+# ------------------------------------------------------------
+# 8. Calculate paired top-minus-bottom differences
+# ------------------------------------------------------------
+
+bead_alpha_paired <- bead_alpha_long %>%
+  dplyr::select(
+    bioreactor,
+    bead_position,
+    metric,
+    value
+  ) %>%
+  tidyr::pivot_wider(
+    names_from = bead_position,
+    values_from = value
+  ) %>%
+  dplyr::mutate(
+    difference_top_minus_bottom =
+      Top - Bottom
+  ) %>%
+  tibble::as_tibble()
+
+print(bead_alpha_paired, n = Inf)
+
+bead_alpha_difference_summary <- bead_alpha_paired %>%
+  dplyr::group_by(metric) %>%
+  dplyr::summarise(
+    n_pairs = sum(
+      is.finite(Bottom) &
+        is.finite(Top)
+    ),
+    mean_difference = mean(
+      difference_top_minus_bottom,
+      na.rm = TRUE
+    ),
+    sd_difference = stats::sd(
+      difference_top_minus_bottom,
+      na.rm = TRUE
+    ),
+    median_difference = stats::median(
+      difference_top_minus_bottom,
+      na.rm = TRUE
+    ),
+    minimum_difference = min(
+      difference_top_minus_bottom,
+      na.rm = TRUE
+    ),
+    maximum_difference = max(
+      difference_top_minus_bottom,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  ) %>%
+  tibble::as_tibble()
+
+print(
+  bead_alpha_difference_summary,
+  n = Inf
+)
+
+# ------------------------------------------------------------
+# 9. Paired Wilcoxon signed-rank tests
+#
+# There are only five independent bioreactors.
+# Tests are therefore interpreted cautiously and paired
+# differences remain central to interpretation.
+#
+# exact = FALSE avoids errors or warnings caused by ties or
+# zero differences.
+# ------------------------------------------------------------
+
+run_paired_wilcoxon <- function(
+  paired_data,
+  metric_name
+) {
+
+  metric_data <- paired_data %>%
+    dplyr::filter(
+      metric == metric_name,
+      is.finite(Bottom),
+      is.finite(Top)
+    )
+
+  if (nrow(metric_data) < 2) {
+    return(
+      tibble::tibble(
+        metric = metric_name,
+        n_pairs = nrow(metric_data),
+        statistic = NA_real_,
+        p_value = NA_real_
+      )
+    )
+  }
+
+  test_result <- stats::wilcox.test(
+    x = metric_data$Top,
+    y = metric_data$Bottom,
+    paired = TRUE,
+    alternative = "two.sided",
+    exact = FALSE,
+    conf.int = FALSE
+  )
+
+  tibble::tibble(
+    metric = metric_name,
+    n_pairs = nrow(metric_data),
+    statistic = unname(
+      test_result$statistic
+    ),
+    p_value = test_result$p.value
+  )
+}
+
+bead_alpha_tests <- dplyr::bind_rows(
+  run_paired_wilcoxon(
+    bead_alpha_paired,
+    "retained_asvs"
+  ),
+  run_paired_wilcoxon(
+    bead_alpha_paired,
+    "Shannon"
+  ),
+  run_paired_wilcoxon(
+    bead_alpha_paired,
+    "Simpson"
+  )
+) %>%
+  dplyr::mutate(
+    p_adjusted_bh = stats::p.adjust(
+      p_value,
+      method = "BH"
+    )
+  ) %>%
+  tibble::as_tibble()
+
+print(bead_alpha_tests, n = Inf)
+
+# ============================================================
+# Figure S5: Descriptive alpha diversity by sample material
+#
+# Retained ASV counts are descriptive because the filtered
+# ASV table contains no singleton ASVs.
+# Error bars represent SD, not SE.
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. Prepare plotting table
+# ------------------------------------------------------------
+
+s5_diversity <- alpha_diversity %>%
+  dplyr::mutate(
+    dna_type_plot = dplyr::case_when(
+      sample_material == "Beads" ~ "Beads",
+      sample_material %in% c(
+        "Batch culture water",
+        "Effluent"
+      ) ~ "Water",
+      TRUE ~ NA_character_
+    ),
+
+    sample_location = dplyr::case_when(
+      sample_material == "Beads" &
+        bead_position == "Bottom" ~
+        "0 cm",
+
+      sample_material == "Beads" &
+        bead_position == "Top" ~
+        "70 cm",
+
+      sample_material == "Batch culture water" ~
+        "Bottle",
+
+      sample_material == "Effluent" ~
+        "Outflow",
+
+      TRUE ~ NA_character_
+    ),
+
+    dna_type_plot = factor(
+      dna_type_plot,
+      levels = c(
+        "Beads",
+        "Water"
+      )
+    ),
+
+    sample_location = factor(
+      sample_location,
+      levels = c(
+        "0 cm",
+        "70 cm",
+        "Bottle",
+        "Outflow"
+      )
+    )
+  ) %>%
+  dplyr::select(
+    sample_id,
+    dna_type_plot,
+    sample_location,
+    retained_asvs,
+    Shannon
+  ) %>%
+  tidyr::pivot_longer(
+    cols = c(
+      retained_asvs,
+      Shannon
+    ),
+    names_to = "measure",
+    values_to = "value"
+  ) %>%
+  dplyr::filter(
+    !is.na(dna_type_plot),
+    !is.na(sample_location),
+    is.finite(value)
+  ) %>%
+  dplyr::mutate(
+    measure = factor(
+      measure,
+      levels = c(
+        "retained_asvs",
+        "Shannon"
+      )
+    )
+  )
+
+# ------------------------------------------------------------
+# 2. Facet labels and palette
+# ------------------------------------------------------------
+
 facet_labs <- c(
-  "Chao1"   = "Chao[1]~richness",
-  "Shannon" = "Shannon~diversity~(H*\"'\")"
+  retained_asvs =
+    "Retained~ASVs~after~filtering",
+  Shannon =
+    "Shannon~diversity~(H*\"'\")"
 )
 
 pal <- c(
-  "0 cm"   = "#E69F00",
-  "70 cm"  = "#009E73",
-  "Bottle" = "#0072B2", 
-  "Outflow"= "#56B4E9"
+  "0 cm" = "#E69F00",
+  "70 cm" = "#009E73",
+  "Bottle" = "#0072B2",
+  "Outflow" = "#56B4E9"
 )
 
-pd  <- position_dodge(width = 0.6)
-pjd <- position_jitterdodge(dodge.width = 0.6, jitter.width = 0.12, jitter.height = 0)
+pd <- position_dodge(
+  width = 0.65
+)
 
-# 6) Plot (points + mean ± SE)
-p_div <- ggplot(div_tab, aes(x = dna_type, y = value, fill = dna_location)) +
-  geom_point(position = pjd, size = 1.8, alpha = 0.65, shape = 21, stroke = 0.4, color = "black") +
-  stat_summary(fun = mean, geom = "point", position = pd, size = 3.0,
-               shape = 21, stroke = 0.7, color = "black") +
-  stat_summary(fun.data = mean_se, geom = "errorbar", position = pd,
-               width = 0.18, linewidth = 0.55) +
-  scale_fill_manual(values = pal, name = "Sample location") +
-  facet_wrap(~ measure, nrow = 1,
-             labeller = labeller(measure = as_labeller(facet_labs, label_parsed)), scales = "free") +
-  labs(x = NULL, y = NULL) +
-  theme_bw(base_size = 11) +
-  theme(
-    legend.position   = "top",
-    legend.title      = element_text(face = "bold"),
-    panel.grid.minor  = element_blank(),
-    strip.background  = element_rect(fill = "white"),
-    strip.text        = element_text(face = "bold"),
-    axis.text.x       = element_text(vjust = 0.95)
-  )
+pjd <- position_jitterdodge(
+  dodge.width = 0.65,
+  jitter.width = 0.10,
+  jitter.height = 0
+)
 
-p_div
-```
+# ------------------------------------------------------------
+# 3. Summary table used for mean ± SD
+#
+# Outflow has n = 1, so its SD is undefined and no error bar
+# will be drawn.
+# ------------------------------------------------------------
 
-```{r}
-# Summarize group mean ± SE for each measure × sample type/location
-div_summary <- div_tab %>%
-  group_by(measure, dna_type, dna_location) %>%
-  summarise(
-    n      = dplyr::n(),
-    mean   = mean(value, na.rm = TRUE),
-    se     = sd(value, na.rm = TRUE) / sqrt(n),
+s5_summary <- s5_diversity %>%
+  dplyr::group_by(
+    dna_type_plot,
+    sample_location,
+    measure
+  ) %>%
+  dplyr::summarise(
+    n = dplyr::n(),
+    mean_value = mean(
+      value,
+      na.rm = TRUE
+    ),
+    sd_value = if_else(
+      n > 1,
+      stats::sd(
+        value,
+        na.rm = TRUE
+      ),
+      NA_real_
+    ),
     .groups = "drop"
-  ) %>%
-  arrange(measure, dna_type, dna_location)
-
-# Round for readability
-div_summary <- div_summary %>%
-  mutate(
-    mean = round(mean, 2),
-    se   = round(se, 2)
   )
 
-div_summary
+print(s5_summary, n = Inf)
 
-```
+# ------------------------------------------------------------
+# 4. Plot
+# ------------------------------------------------------------
 
-
-# Taxonomic summaries
-
-
-```{r}
-pretty_labels <- c(
-  "water-control-T0",
-  "water-amendment-T0",
-  "water-control-T4-A",
-  "water-control-T4-B",
-  "water-amendment-T4-A",
-  "water-amendment-T4-B",
-  "beads-BR5-bottom",
-  "beads-BR6-bottom",
-  "beads-BR8-bottom",
-  "beads-BR9-bottom",
-  "beads-BR10-bottom",
-  "beads-BR5-top",
-  "beads-BR6-top",
-  "beads-BR8-top",
-  "beads-BR9-top",
-  "beads-BR10-top",
-  "effluent"
-)
-
-stopifnot(length(pretty_labels) == nrow(sample_info_tab))
-label_map <- setNames(pretty_labels, rownames(sample_info_tab))
-```
-
-
-```{r}
-# --- Phylum overview with custom colors & ordered greys ---
-
-library(tibble)
-
-# Identify phylum rank
-rk <- rank_names(ASV_physeq)
-phylum_rank <- rk[tolower(rk) == "phylum"]
-stopifnot(length(phylum_rank) > 0)
-phylum_rank <- phylum_rank[1]
-
-# Collapse to phylum
-phyla_ps      <- tax_glom(ASV_physeq, taxrank = phylum_rank)
-phyla_counts  <- otu_table(phyla_ps)                       
-phyla_tax_vec <- as.vector(tax_table(phyla_ps)[, phylum_rank])
-rownames(phyla_counts) <- phyla_tax_vec
-
-# Add 'Unclassified'
-unclassified_tax_counts <- colSums(count_tab) - colSums(phyla_counts)
-phyla_plus_uncl <- rbind(phyla_counts, "Unclassified" = unclassified_tax_counts)
-
-# Proportions (% of sample)
-major_taxa_prop <- apply(phyla_plus_uncl, 2, function(x) x / sum(x) * 100)
-
-# Filter >5% then add 'Other'
-keep <- apply(major_taxa_prop, 1, max) > 5
-temp <- major_taxa_prop[keep, , drop = FALSE]
-other <- colSums(major_taxa_prop) - colSums(temp)
-filt_prop <- rbind(temp, "Other" = other)
-
-# Preserve sample names with hyphens
-filt_prop_tbl <- as_tibble(filt_prop, rownames = "Major_Taxa", .name_repair = "minimal")
-
-# Normalize phylum naming
-normalize_phylum <- function(x) ifelse(x == "Thermoprotetoa", "Thermoproteota", x)
-plot_df <- filt_prop_tbl |>
-  pivot_longer(-Major_Taxa, names_to = "Sample", values_to = "Proportion") |>
-  mutate(
-    Major_Taxa = normalize_phylum(Major_Taxa),
-    Sample = factor(Sample, levels = rownames(sample_info_tab)) # <-- your curated order
+p_s5 <- ggplot(
+  s5_diversity,
+  aes(
+    x = dna_type_plot,
+    y = value,
+    fill = sample_location
   )
+) +
 
-# --- Build legend & fill colors ---
-highlight_levels <- c("Planctomycetota", "Thermoproteota")
-specials <- c("Other", "Unclassified")
+  # Individual samples
+  geom_point(
+    position = pjd,
+    size = 2.0,
+    alpha = 0.7,
+    shape = 21,
+    stroke = 0.45,
+    color = "black"
+  ) +
 
-# Compute max abundance to rank remaining phyla
-max_abund <- plot_df %>%
-  group_by(Major_Taxa) %>%
-  summarise(maxP = max(Proportion, na.rm = TRUE), .groups = "drop")
+  # SD among independent samples
+  geom_errorbar(
+    data = s5_summary,
+    aes(
+      x = dna_type_plot,
+      ymin = mean_value - sd_value,
+      ymax = mean_value + sd_value,
+      group = sample_location
+    ),
+    inherit.aes = FALSE,
+    position = pd,
+    width = 0.16,
+    linewidth = 0.6,
+    na.rm = TRUE
+  ) +
 
-# Order: highlights → other phyla by max abundance → specials
-other_levels <- setdiff(max_abund$Major_Taxa,
-                        c(highlight_levels, specials))
-other_levels <- max_abund %>%
-  filter(Major_Taxa %in% other_levels) %>%
-  arrange(desc(maxP)) %>%             # dark = most abundant
-  pull(Major_Taxa)
+  # Group mean
+  geom_point(
+    data = s5_summary,
+    aes(
+      x = dna_type_plot,
+      y = mean_value,
+      fill = sample_location,
+      group = sample_location
+    ),
+    inherit.aes = FALSE,
+    position = pd,
+    size = 3.4,
+    shape = 21,
+    stroke = 0.8,
+    color = "black"
+  ) +
 
-ordered_levels <- c(highlight_levels, other_levels, specials)
-plot_df$Major_Taxa <- factor(plot_df$Major_Taxa, levels = ordered_levels)
+  scale_fill_manual(
+    values = pal,
+    name = "Sample location",
+    drop = FALSE
+  ) +
 
-# Colors
-highlight <- c("Planctomycetota" = "#3E8FB0",  # teal
-               "Thermoproteota"  = "#D95F02")  # orange
-other_greys <- gray.colors(length(other_levels), start = 0.2, end = 0.8) # dark→light
-names(other_greys) <- other_levels
-special_greys <- c("Other" = "#D3D3D3", "Unclassified" = "#BEBEBE")
+  facet_wrap(
+    ~ measure,
+    nrow = 1,
+    scales = "free_y",
+    labeller = labeller(
+      measure = as_labeller(
+        facet_labs,
+        label_parsed
+      )
+    )
+  ) +
 
-fill_vals <- c(highlight, other_greys, special_greys)
+  labs(
+    x = NULL,
+    y = NULL
+  ) +
 
-# --- Plot ---
-fig5 <- ggplot(plot_df, aes(x = Sample, y = Proportion, fill = Major_Taxa)) +
-  geom_bar(stat = "identity", width = 0.65) +
-  scale_fill_manual(values = fill_vals, breaks = ordered_levels, drop = FALSE) +
-  scale_x_discrete(labels = label_map) +                           # <- HERE
-  labs(x = NULL, y = "% of 16S rRNA gene copies recovered",
-       title = "All samples – Phylum summary") +
-  theme_bw() +
+  theme_bw(
+    base_size = 11
+  ) +
+
   theme(
-    axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1),  # easier to read than 90°
-    legend.title = element_blank(),
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor.x = element_blank()
+    legend.position = "top",
+    legend.title = element_text(
+      face = "bold"
+    ),
+    panel.grid.minor = element_blank(),
+    strip.background = element_rect(
+      fill = "white"
+    ),
+    strip.text = element_text(
+      face = "bold"
+    ),
+    axis.text.x = element_text(
+      vjust = 0.95
+    )
   )
 
+p_s5
 
-```
-
-```{r}
-# --- Bead-only: Family composition of Planctomycetota & Thermoproteota ---
-# with incertae collapsed per phylum, phylum-driven color scheme
-
-rk <- rank_names(ASV_physeq)
-family_rank <- rk[tolower(rk) == "family"] ; stopifnot(length(family_rank) > 0)
-phylum_rank <- rk[tolower(rk) == "phylum"] ; stopifnot(length(phylum_rank) > 0)
-family_rank <- family_rank[1] ; phylum_rank <- phylum_rank[1]
-
-# Subset to beads only, preserve curated order
-beads_physeq <- subset_samples(ASV_physeq, dna_type == "beads")
-beads_physeq <- prune_samples(sample_names(beads_physeq) %in% rownames(sample_info_tab), beads_physeq)
-
-# Collapse to Family
-family_beads <- tax_glom(beads_physeq, taxrank = family_rank)
-
-# Rel abundance (of-sample)
-family_counts <- otu_table(family_beads)
-family_tax    <- tax_table(family_beads)[, c(family_rank, phylum_rank), drop = FALSE]
-family_rel    <- apply(family_counts, 2, function(x) x / sum(x))
-
-family_long <- as.data.frame(t(family_rel)) %>%
-  tibble::rownames_to_column("Sample") %>%
-  pivot_longer(-Sample, names_to = "Feature", values_to = "RelAbund") %>%
-  mutate(
-    Sample = factor(Sample, levels = rownames(sample_info_tab)),
-    Family = as.vector(family_tax[Feature, family_rank]),
-    Phylum = as.vector(family_tax[Feature, phylum_rank]),
-    Phylum = ifelse(Phylum == "Thermoprotetoa", "Thermoproteota", Phylum)
-  ) %>%
-  filter(Phylum %in% c("Planctomycetota", "Thermoproteota"))
-
-# ---- Collapse incertae sedis families *within each phylum* ----
-family_long <- family_long %>%
-  mutate(Family = ifelse(grepl("incertae", Family, ignore.case = TRUE),
-                         paste("Incertae sedis (", Phylum, ")", sep = ""),
-                         Family))
-
-# ---- Colors ----
-# Split out Planctomycetota core vs incertae
-plancto_fams <- unique(family_long$Family[family_long$Phylum == "Planctomycetota"])
-incertae_plancto <- grep("Incertae", plancto_fams, value = TRUE)
-core_plancto     <- setdiff(plancto_fams, incertae_plancto)
-
-# Teal shades for core Planctomycetota
-teal_palette <- colorRampPalette(c("#3E8FB0", "#81BBCF", "#B6D7E4"))
-core_cols <- teal_palette(length(core_plancto))
-names(core_cols) <- core_plancto
-
-# Grey for incertae sedis (Planctomycetota)
-incertae_col <- c("Incertae sedis (Planctomycetota)" = "grey60")
-
-# Orange shades for Thermoproteota families
-thermo_fams <- unique(family_long$Family[family_long$Phylum == "Thermoproteota"])
-orange_palette <- colorRampPalette(c("#D95F02", "#E89B61", "#F6CDB2"))
-thermo_cols <- orange_palette(length(thermo_fams))
-names(thermo_cols) <- thermo_fams
-
-# Combine all fills
-fill_vals <- c(thermo_cols, core_cols, incertae_col)
-
-# Legend / stacking order
-ordered_levels <- c(thermo_fams, core_plancto, incertae_plancto)
-family_long$Family <- factor(family_long$Family, levels = ordered_levels)
-
-# ---- Plot ----
-p_fam_ofsample <- ggplot(family_long, aes(x = Sample, y = RelAbund, fill = Family)) +
-  geom_bar(stat = "identity", width = 0.7, position = position_stack(reverse = TRUE)) +
-  scale_fill_manual(values = fill_vals, breaks = ordered_levels, limits = ordered_levels, drop = FALSE) +
-  guides(fill = guide_legend(reverse = TRUE)) +
-  facet_wrap(~ Phylum, ncol = 1, scales = "free_y") +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  scale_x_discrete(labels = label_map) +                           # <- HERE
-  labs(x = NULL, y = "Relative abundance (of sample)",
-       title = "Bead samples: Family composition of Planctomycetota & Thermoproteota") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1),
-        legend.title = element_blank(),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank())
-
-```
-
-```{r}
-# --- Bead-only: Family composition of Planctomycetota & Thermoproteota ---
-# normalized within each phylum (bars sum to 100% per phylum per sample)
-
-rk <- rank_names(ASV_physeq)
-family_rank <- rk[tolower(rk) == "family"] ; stopifnot(length(family_rank) > 0)
-phylum_rank <- rk[tolower(rk) == "phylum"] ; stopifnot(length(phylum_rank) > 0)
-family_rank <- family_rank[1] ; phylum_rank <- phylum_rank[1]
-
-# Subset beads only
-beads_physeq <- subset_samples(ASV_physeq, dna_type == "beads")
-beads_physeq <- prune_samples(sample_names(beads_physeq) %in% rownames(sample_info_tab), beads_physeq)
-
-# Collapse to Family
-family_beads <- tax_glom(beads_physeq, taxrank = family_rank)
-
-# Extract counts
-family_counts <- otu_table(family_beads)
-family_tax    <- tax_table(family_beads)[, c(family_rank, phylum_rank), drop = FALSE]
-
-family_long <- as.data.frame(t(family_counts)) %>%
-  tibble::rownames_to_column("Sample") %>%
-  pivot_longer(-Sample, names_to = "Feature", values_to = "Count") %>%
-  mutate(
-    Sample = factor(Sample, levels = rownames(sample_info_tab)),
-    Family = as.vector(family_tax[Feature, family_rank]),
-    Phylum = as.vector(family_tax[Feature, phylum_rank]),
-    Phylum = ifelse(Phylum == "Thermoprotetoa", "Thermoproteota", Phylum)
-  ) %>%
-  filter(Phylum %in% c("Planctomycetota", "Thermoproteota"))
-
-# Collapse incertae sedis within each phylum
-family_long <- family_long %>%
-  mutate(Family = ifelse(grepl("incertae", Family, ignore.case = TRUE),
-                         paste("Incertae sedis (", Phylum, ")", sep = ""),
-                         Family))
-
-# Compute relative abundance *within each phylum per sample*
-family_long <- family_long %>%
-  group_by(Sample, Phylum) %>%
-  mutate(RelAbund_withinPhylum = Count / sum(Count, na.rm = TRUE)) %>%
-  ungroup()
-
-# ---- Define colors ----
-# Separate Planctomycetota core vs incertae
-plancto_fams <- unique(family_long$Family[family_long$Phylum == "Planctomycetota"])
-incertae_plancto <- grep("Incertae", plancto_fams, value = TRUE)
-core_plancto     <- setdiff(plancto_fams, incertae_plancto)
-
-teal_palette <- colorRampPalette(c("#3E8FB0", "#81BBCF", "#B6D7E4"))
-core_cols <- teal_palette(length(core_plancto))
-names(core_cols) <- core_plancto
-incertae_col <- c("Incertae sedis (Planctomycetota)" = "grey60")
-
-# Thermoproteota families
-thermo_fams <- unique(family_long$Family[family_long$Phylum == "Thermoproteota"])
-orange_palette <- colorRampPalette(c("#D95F02", "#E89B61", "#F6CDB2"))
-thermo_cols <- orange_palette(length(thermo_fams))
-names(thermo_cols) <- thermo_fams
-
-fill_vals <- c(thermo_cols, core_cols, incertae_col)
-ordered_levels <- c(thermo_fams, core_plancto, incertae_plancto)
-family_long$Family <- factor(family_long$Family, levels = ordered_levels)
-
-# ---- Plot ----
-fig6 <- ggplot(family_long, aes(x = Sample, y = RelAbund_withinPhylum, fill = Family)) +
-  geom_bar(stat = "identity", width = 0.7, position = position_stack(reverse = TRUE)) +
-  scale_fill_manual(values = fill_vals, breaks = ordered_levels, limits = ordered_levels, drop = FALSE) +
-  guides(fill = guide_legend(reverse = TRUE)) +
-  facet_wrap(~ Phylum, ncol = 1, scales = "free_y") +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  scale_x_discrete(labels = label_map) +                           # <- HERE
-  labs(x = NULL, y = "Relative abundance (within phylum)",
-       title = "Bead samples: Family composition within each phylum") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1),
-        legend.title = element_blank(),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank())
-
-```
-
-```{r}
-# --- Build tidy phylum table (phyla_df) ---
-
-# Identify phylum rank
-rk <- rank_names(ASV_physeq)
-phylum_rank <- rk[tolower(rk) == "phylum"] ; stopifnot(length(phylum_rank) > 0)
-phylum_rank <- phylum_rank[1]
-
-# Collapse to phylum level
-phyla_ps      <- tax_glom(ASV_physeq, taxrank = phylum_rank)
-phyla_counts  <- otu_table(phyla_ps)                        # phyla x samples
-phyla_tax_vec <- as.vector(tax_table(phyla_ps)[, phylum_rank])
-rownames(phyla_counts) <- phyla_tax_vec
-
-# Convert to % of sample
-phyla_rel <- apply(phyla_counts, 2, function(x) x / sum(x) * 100)
-
-# Tidy into long format
-phyla_df <- as.data.frame(t(phyla_rel), check.names = FALSE) %>%
-  tibble::rownames_to_column("Sample") %>%
-  pivot_longer(-Sample, names_to = "Phylum", values_to = "RelAbund_percent") %>%
-  mutate(Sample = factor(Sample, levels = rownames(sample_info_tab)))
-
-# --- Build tidy family table (family_df) ---
-
-# Identify ranks
-family_rank <- rk[tolower(rk) == "family"] ; stopifnot(length(family_rank) > 0)
-family_rank <- family_rank[1]
-
-# Collapse to family
-family_ps <- tax_glom(ASV_physeq, taxrank = family_rank)
-family_counts <- otu_table(family_ps)
-family_tax    <- tax_table(family_ps)[, c(family_rank, phylum_rank), drop = FALSE]
-
-# Convert to % of sample
-family_rel <- apply(family_counts, 2, function(x) x / sum(x) * 100)
-
-# Tidy into long format
-family_df <- as.data.frame(t(family_rel), check.names = FALSE) %>%
-  tibble::rownames_to_column("Sample") %>%
-  pivot_longer(-Sample, names_to = "Feature", values_to = "RelAbund_percent") %>%
-  mutate(
-    Sample = factor(Sample, levels = rownames(sample_info_tab)),
-    Family = as.vector(family_tax[Feature, family_rank]),
-    Phylum = as.vector(family_tax[Feature, phylum_rank]),
-    Phylum = ifelse(Phylum == "Thermoprotetoa", "Thermoproteota", Phylum),
-    # Collapse incertae sedis into a single label per phylum
-    Family = ifelse(grepl("incertae", Family, ignore.case = TRUE),
-                    paste("Incertae sedis (", Phylum, ")", sep = ""),
-                    Family)
-  )
-
-# --- Build family_within_df (relative to phylum totals) ---
-
-family_within_df <- family_df %>%
-  group_by(Sample, Phylum) %>%
-  mutate(RelAbund_withinPhylum = RelAbund_percent / sum(RelAbund_percent, na.rm = TRUE) * 100) %>%
-  ungroup()
-```
+# ------------------------------------------------------------
+# 5. Save figure and reporting table
+# ------------------------------------------------------------
 
 
-```{r}
-# Add sample_group to metadata
-sample_info_tab$sample_group <- case_when(
-  sample_info_tab$dna_type == "beads" & sample_info_tab$dna_location == "0cm"  ~ "Beads-0cm",
-  sample_info_tab$dna_type == "beads" & sample_info_tab$dna_location == "70cm" ~ "Beads-70cm",
-  sample_info_tab$dna_type == "water" & grepl("T0", rownames(sample_info_tab)) ~ "T0 water",
-  sample_info_tab$dna_type == "water" & grepl("T4", rownames(sample_info_tab)) ~ "T4 incubation water",
-  sample_info_tab$dna_type == "water" & grepl("outflow", sample_info_tab$dna_location, ignore.case = TRUE) ~ "Effluent",
-  TRUE ~ "Other"
+ggsave(
+  filename =
+    "figures/Figure_S5_alpha_diversity.pdf",
+  plot = p_s5,
+  width = 8.5,
+  height = 4.8
 )
 
-# --- Phylum summary ---
-phyla_summary <- phyla_df %>%
-  left_join(sample_info_tab %>% tibble::rownames_to_column("Sample"),
-            by = "Sample") %>%
-  group_by(sample_group, Phylum) %>%
-  summarise(mean_abund = mean(RelAbund_percent, na.rm = TRUE),
-            sd_abund   = sd(RelAbund_percent, na.rm = TRUE),
-            n = n(),
-            .groups = "drop")
+readr::write_csv(
+  s5_summary,
+  "results/Figure_S5_alpha_diversity_summary.csv"
+)
 
-# --- Family summary (of-sample) ---
-family_summary <- family_df %>%
-  left_join(sample_info_tab %>% tibble::rownames_to_column("Sample"),
-            by = "Sample") %>%
-  group_by(sample_group, Phylum, Family) %>%
-  summarise(mean_abund = mean(RelAbund_percent, na.rm = TRUE),
-            sd_abund   = sd(RelAbund_percent, na.rm = TRUE),
-            n = n(),
-            .groups = "drop") %>% 
-  filter(sample_group %in% c("Beads-0cm", "Beads-70cm")) %>% 
-  filter(Phylum %in% c("Planctomycetota", "Thermoproteota"))
+# ------------------------------------------------------------
+# 12. Export results
+# ------------------------------------------------------------
 
-# --- Family summary (within-phylum) ---
-family_within_summary <- family_within_df %>%
-  left_join(sample_info_tab %>% tibble::rownames_to_column("Sample"),
-            by = "Sample") %>%
-  group_by(sample_group, Phylum, Family) %>%
-  summarise(mean_abund_withinPhylum = mean(RelAbund_withinPhylum, na.rm = TRUE),
-            sd_abund_withinPhylum   = sd(RelAbund_withinPhylum, na.rm = TRUE),
-            n = n(),
-            .groups = "drop")%>% 
-  filter(sample_group %in% c("Beads-0cm", "Beads-70cm")) %>% 
-  filter(Phylum %in% c("Planctomycetota", "Thermoproteota"))
+readr::write_csv(
+  alpha_diversity,
+  "results/community_alpha_diversity_all_samples.csv"
+)
+
+readr::write_csv(
+  alpha_depth_tests,
+  "results/community_alpha_library_depth_tests.csv"
+)
+
+readr::write_csv(
+  bead_pair_check,
+  "results/community_alpha_bead_pair_check.csv"
+)
+
+readr::write_csv(
+  bead_alpha_summary,
+  "results/community_alpha_bead_position_summary.csv"
+)
+
+readr::write_csv(
+  bead_alpha_paired,
+  "results/community_alpha_bead_paired_values.csv"
+)
+
+readr::write_csv(
+  bead_alpha_difference_summary,
+  "results/community_alpha_bead_paired_differences.csv"
+)
+
+readr::write_csv(
+  bead_alpha_tests,
+  "results/community_alpha_bead_paired_tests.csv"
+)
 
 ```
 
+
+
+
 ```{r}
-library(vegan)
-library(DESeq2)
+# ============================================================
+# Stage 3: Beta diversity
+#
+# Analysis structure:
+# 1. Descriptive Bray-Curtis PCoA across all samples.
+# 2. Paired bottom-versus-top bead comparison.
+# 3. PERMDISP diagnostic for bottom versus top bead samples.
+# 4. Within-bioreactor bottom-to-top Bray-Curtis distances.
+#
+# Important:
+# - Relative abundance is used for Bray-Curtis distances.
+# - The single bioreactor-effluent sample is displayed but is
+#   not included in inferential comparisons.
+# - Bottom-versus-top testing is restricted within bioreactor.
+# ============================================================
+
 library(tidyverse)
-set.seed(123)
+library(phyloseq)
+library(vegan)
+library(permute)
+library(ggplot2)
 
-# Bead-only subsets, preserving your curated order
-bead_idx   <- sample_info_tab$dna_type == "beads"
-bead_samps <- rownames(sample_info_tab)[bead_idx]
-bead_meta  <- sample_info_tab[bead_samps, , drop = FALSE]
-bead_counts <- count_tab[, bead_samps, drop = FALSE]
+dir.create("results", showWarnings = FALSE)
+dir.create("figures", showWarnings = FALSE)
 
-# Make sure Location is a factor with desired order
-bead_meta$Location <- factor(bead_meta$dna_location, levels = c("0cm","70cm"))
-stopifnot(all(colnames(bead_counts) == rownames(bead_meta)))
+set.seed(12345)
 
-```
+# ------------------------------------------------------------
+# 1. Convert ASV counts to relative abundance
+# ------------------------------------------------------------
 
-```{r}
-# Bray–Curtis on **relative** counts (common for beta-dispersion/permANOVA)
-rel_bead_counts <- apply(bead_counts, 2, function(x) x / sum(x))
-bray_beads <- vegdist(t(rel_bead_counts), method = "bray")
+ASV_physeq_rel <- phyloseq::transform_sample_counts(
+  ASV_physeq,
+  function(x) {
+    total <- sum(x)
 
-# PERMDISP
-bead_disp <- betadisper(bray_beads, group = bead_meta$dna_location)
-anova(bead_disp)          # F-test # F= 1.34, p = 0.2804
-permutest(bead_disp, permutations = 999) # F= 1.34, p = 0.297
+    if (total == 0) {
+      return(x)
+    }
 
-# PERMANOVA
-adonis2(bray_beads ~ bead_meta$dna_location, permutations = 999) # F = 1.88, p = 0.027 
-```
+    x / total
+  }
+)
 
-```{r}
-# Build DESeqDataSet (raw counts)
-dds_asv <- DESeqDataSetFromMatrix(bead_counts, colData = bead_meta, design = ~ dna_location)
+# Confirm every non-empty sample sums to approximately 1.
+relative_abundance_sums <- tibble::tibble(
+  sample_id = phyloseq::sample_names(ASV_physeq_rel),
+  relative_abundance_sum =
+    phyloseq::sample_sums(ASV_physeq_rel)
+)
 
-# Size factors that tolerate many zeros typical of 16S
-dds_asv <- estimateSizeFactors(dds_asv, type = "poscounts")
+print(relative_abundance_sums)
 
-# DESeq pipeline
-dds_asv <- DESeq(dds_asv, fitType = "parametric")
-
-# Contrast: 70cm vs 0cm (log2FC > 0 => higher at 70cm)
-res_asv <- results(dds_asv, contrast = c("dna_location","70cm","0cm"), alpha = 0.05)
-# Optional LFC shrinkage for nicer effect sizes (requires apeglm)
-# BiocManager::install("apeglm")
-# library(apeglm)
-# res_asv <- lfcShrink(dds_asv, coef = "Location_70cm_vs_0cm", type = "apeglm")
-
-# Add taxonomy (if ASV rownames match tax_tab rownames)
-tax_df <- as.data.frame(tax_tab)
-tax_keep <- tax_df[rownames(res_asv), , drop = FALSE]
-res_asv_tbl <- as_tibble(res_asv, rownames = "ASV") %>%
-  bind_cols(tax_keep %>% rownames_to_column("ASV") %>% select(-ASV)) %>%
-  arrange(padj, desc(abs(log2FoldChange)))
-
-# Quick filters
-res_asv_sig <- res_asv_tbl %>% filter(!is.na(padj), padj < 0.05)
-
-# Save
-# write.csv(res_asv_tbl, "deseq_beads_ASV_all.csv", row.names = FALSE)
-# write.csv(res_asv_sig, "deseq_beads_ASV_sig_padj_lt_0.05.csv", row.names = FALSE)
-
-```
-
-
-```{r}
-# Prefer taxonomy from your phyloseq object (safer than a standalone table)
-tax_df <- ASV_physeq %>% tax_table() %>% as.data.frame()
-tax_df <- tax_df %>% tibble::rownames_to_column("ASV")
-
-# Determine the actual rank names and pick the family column robustly
-rk <- rank_names(ASV_physeq)
-family_col <- rk[tolower(rk) == "family"]
-if (length(family_col) == 0) stop("No taxonomy column matching 'family' found.")
-family_col <- family_col[1] 
-
-```
-
-```{r}
-# Start from your DESeq2 ASV results (res_asv from earlier)
-res_asv_tbl <- as_tibble(res_asv, rownames = "ASV")
-
-# Join to taxonomy by ASV id
-res_asv_tax <- res_asv_tbl %>%
-  left_join(tax_df, by = "ASV")
-
-# Mark significant
-res_asv_sig <- res_asv_tax %>% filter(!is.na(padj), padj < 0.05)
-```
-
-
-```{r}
-# Find the phylum column too (for fallback labeling)
-phylum_col <- rk[tolower(rk) == "phylum"][1]
-
-res_asv_sig <- res_asv_sig %>%
-  mutate(Family_filled = dplyr::coalesce(.data[[family_col]], NA_character_),
-         Family_filled = ifelse(
-           is.na(Family_filled) & !is.na(.data[[phylum_col]]),
-           paste0("Unclassified_Family (", .data[[phylum_col]], ")"),
-           Family_filled
-         ),
-         Family_filled = ifelse(is.na(Family_filled), "Unclassified_Family", Family_filled))
-
-
-```
-
-```{r}
-res_asv_sig_fam <- res_asv_sig %>%
-  mutate(direction = ifelse(log2FoldChange > 0, "Enriched_70cm", "Enriched_0cm")) %>%
-  group_by(Family = Family_filled, direction) %>%
-  summarise(
-    n_sig_ASVs  = dplyr::n(),
-    mean_log2FC = mean(log2FoldChange, na.rm = TRUE),
-    min_padj    = min(padj, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(n_sig_ASVs), desc(abs(mean_log2FC)))
-```
-
-
-```{r}
-summarize_top_hits <- function(tbl, id_col = "ASV", n = 10) {
-  tbl %>%
-    filter(!is.na(padj), padj < 0.05) %>%
-    arrange(padj, desc(abs(log2FoldChange))) %>%
-    slice_head(n = n) %>%
-    mutate(direction = ifelse(log2FoldChange > 0, "enriched at 70 cm", "enriched at 0 cm")) %>%
-    select(dplyr::all_of(id_col), log2FoldChange, padj, direction)
+if (
+  any(
+    abs(
+      relative_abundance_sums$relative_abundance_sum - 1
+    ) > 1e-8
+  )
+) {
+  warning(
+    "At least one relative-abundance sample does not sum to 1."
+  )
 }
 
-# ASV level
-top_asv_hits <- summarize_top_hits(res_asv_tax, id_col = "ASV", n = 10)
+# ------------------------------------------------------------
+# 2. Calculate Bray-Curtis distance across all samples
+# ------------------------------------------------------------
 
-# Family level (built from res_asv_sig_fam)
-top_family_hits <- res_asv_sig_fam %>%
-  arrange(min_padj, desc(abs(mean_log2FC))) %>%
-  slice_head(n = 10) %>%
-  transmute(
-    Family,
-    log2FoldChange = mean_log2FC,
-    padj = min_padj,
-    direction = ifelse(grepl("70cm", direction), "enriched at 70 cm", "enriched at 0 cm")
+bray_all <- phyloseq::distance(
+  ASV_physeq_rel,
+  method = "bray"
+)
+
+# ------------------------------------------------------------
+# 3. PCoA across all samples
+# ------------------------------------------------------------
+
+pcoa_all <- phyloseq::ordinate(
+  ASV_physeq_rel,
+  method = "PCoA",
+  distance = bray_all
+)
+
+# Extract percentage variation explained.
+pcoa_all_eigenvalues <- pcoa_all$values$Relative_eig
+
+pcoa_all_axis1_pct <- 100 * pcoa_all_eigenvalues[1]
+pcoa_all_axis2_pct <- 100 * pcoa_all_eigenvalues[2]
+
+pcoa_all_scores <- as.data.frame(
+  pcoa_all$vectors[, 1:2, drop = FALSE]
+) %>%
+  tibble::rownames_to_column("sample_id") %>%
+  tibble::as_tibble() %>%
+  dplyr::rename(
+    Axis1 = Axis.1,
+    Axis2 = Axis.2
+  ) %>%
+  dplyr::left_join(
+    sample_info %>%
+      tibble::rownames_to_column("sample_id_join") %>%
+      tibble::as_tibble() %>%
+      dplyr::select(
+        sample_id_join,
+        sample_material,
+        incubation_stage,
+        treatment,
+        bead_position,
+        bioreactor,
+        bottle,
+        hours_elapsed
+      ),
+    by = c("sample_id" = "sample_id_join")
+  ) %>%
+  dplyr::mutate(
+    sample_group = dplyr::case_when(
+      sample_material == "Batch culture water" &
+        hours_elapsed == 0 ~
+        "Batch T0",
+
+      sample_material == "Batch culture water" &
+        hours_elapsed > 0 ~
+        "Batch 96 h",
+
+      sample_material == "Effluent" ~
+        "Bioreactor effluent",
+
+      sample_material == "Beads" &
+        bead_position == "Bottom" ~
+        "Beads — bottom",
+
+      sample_material == "Beads" &
+        bead_position == "Top" ~
+        "Beads — top",
+
+      TRUE ~ "Other"
+    ),
+
+    sample_group = factor(
+      sample_group,
+      levels = c(
+        "Batch T0",
+        "Batch 96 h",
+        "Bioreactor effluent",
+        "Beads — bottom",
+        "Beads — top"
+      )
+    )
   )
+
+print(pcoa_all_scores, n = Inf)
+
+# ------------------------------------------------------------
+# 4. Plot all samples descriptively
+#
+# No confidence ellipses are used because:
+# - group sizes are very small;
+# - the effluent group contains only one sample;
+# - the purpose is descriptive visualization.
+# ------------------------------------------------------------
+
+sample_group_colors <- c(
+  "Batch T0" = "#56B4E9",
+  "Batch 96 h" = "#0072B2",
+  "Bioreactor effluent" = "#CC79A7",
+  "Beads — bottom" = "#E69F00",
+  "Beads — top" = "#009E73"
+)
+
+sample_group_shapes <- c(
+  "Batch T0" = 21,
+  "Batch 96 h" = 22,
+  "Bioreactor effluent" = 23,
+  "Beads — bottom" = 24,
+  "Beads — top" = 25
+)
+
+p_beta_all <- ggplot(
+  pcoa_all_scores,
+  aes(
+    x = Axis1,
+    y = Axis2,
+    fill = sample_group,
+    shape = sample_group
+  )
+) +
+  geom_hline(
+    yintercept = 0,
+    linewidth = 0.35,
+    color = "grey75"
+  ) +
+  geom_vline(
+    xintercept = 0,
+    linewidth = 0.35,
+    color = "grey75"
+  ) +
+  geom_point(
+    size = 3.6,
+    color = "black",
+    stroke = 0.75,
+    alpha = 0.9
+  ) +
+  scale_fill_manual(
+    values = sample_group_colors,
+    name = "Sample group",
+    drop = FALSE
+  ) +
+  scale_shape_manual(
+    values = sample_group_shapes,
+    name = "Sample group",
+    drop = FALSE
+  ) +
+  labs(
+    x = paste0(
+      "PCoA axis 1 (",
+      round(pcoa_all_axis1_pct, 1),
+      "%)"
+    ),
+    y = paste0(
+      "PCoA axis 2 (",
+      round(pcoa_all_axis2_pct, 1),
+      "%)"
+    ),
+    caption = paste(
+      "Bray–Curtis distances calculated from",
+      "relative-abundance ASV profiles."
+    )
+  ) +
+  coord_equal() +
+  theme_bw(base_size = 11) +
+  theme(
+    legend.position = "top",
+    legend.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+p_beta_all
+
+# ------------------------------------------------------------
+# 5. Create bead-only phyloseq object
+# ------------------------------------------------------------
+
+ASV_beads_rel <- phyloseq::subset_samples(
+  ASV_physeq_rel,
+  sample_material == "Beads" &
+    !is.na(bead_position) &
+    !is.na(bioreactor)
+)
+
+# Remove ASVs absent from all retained bead samples.
+ASV_beads_rel <- phyloseq::prune_taxa(
+  phyloseq::taxa_sums(ASV_beads_rel) > 0,
+  ASV_beads_rel
+)
+
+cat(
+  "Bead-only samples:",
+  phyloseq::nsamples(ASV_beads_rel),
+  "\n"
+)
+
+cat(
+  "Bead-only ASVs:",
+  phyloseq::ntaxa(ASV_beads_rel),
+  "\n"
+)
+
+# ------------------------------------------------------------
+# 6. Construct bead metadata in exact phyloseq sample order
+# ------------------------------------------------------------
+
+bead_sample_order <- phyloseq::sample_names(
+  ASV_beads_rel
+)
+
+bead_meta <- data.frame(
+  phyloseq::sample_data(ASV_beads_rel)
+) %>%
+  tibble::as_tibble() %>%
+  dplyr::mutate(
+    bead_position = factor(
+      bead_position,
+      levels = c("Bottom", "Top")
+    ),
+    bioreactor = factor(bioreactor)
+  )
+# Force metadata into the exact order used by the distance matrix.
+bead_meta <- bead_meta %>%
+  dplyr::slice(
+    match(
+      bead_sample_order,
+      sample_id
+    )
+  )
+
+stopifnot(
+  identical(
+    bead_meta$sample_id,
+    bead_sample_order
+  )
+)
+
+print(
+  bead_meta %>%
+    dplyr::select(
+      sample_id,
+      bioreactor,
+      bead_position
+    ),
+  n = Inf
+)
+
+# Verify one bottom and one top sample per bioreactor.
+bead_pair_inventory <- bead_meta %>%
+  dplyr::count(
+    bioreactor,
+    bead_position,
+    name = "n_samples",
+    .drop = FALSE
+  )
+
+print(bead_pair_inventory, n = Inf)
+
+if (
+  any(
+    bead_pair_inventory$n_samples != 1
+  )
+) {
+  stop(
+    "Each bioreactor must contain exactly one bottom and ",
+    "one top sample for the paired beta-diversity test."
+  )
+}
+
+# ------------------------------------------------------------
+# 7. Bray-Curtis distance among bead samples
+# ------------------------------------------------------------
+
+bray_beads <- phyloseq::distance(
+  ASV_beads_rel,
+  method = "bray"
+)
+
+# ------------------------------------------------------------
+# 8. Bead-only PCoA
+# ------------------------------------------------------------
+
+pcoa_beads <- phyloseq::ordinate(
+  ASV_beads_rel,
+  method = "PCoA",
+  distance = bray_beads
+)
+
+pcoa_bead_eigenvalues <- pcoa_beads$values$Relative_eig
+
+pcoa_bead_axis1_pct <- 100 * pcoa_bead_eigenvalues[1]
+pcoa_bead_axis2_pct <- 100 * pcoa_bead_eigenvalues[2]
+
+pcoa_bead_scores <- as.data.frame(
+  pcoa_beads$vectors[, 1:2, drop = FALSE]
+) %>%
+  tibble::rownames_to_column("sample_id") %>%
+  tibble::as_tibble() %>%
+  dplyr::rename(
+    Axis1 = Axis.1,
+    Axis2 = Axis.2
+  ) %>%
+  dplyr::left_join(
+    bead_meta %>%
+      dplyr::select(
+        sample_id,
+        bioreactor,
+        bead_position
+      ),
+    by = "sample_id"
+  )
+
+print(pcoa_bead_scores, n = Inf)
+
+# ------------------------------------------------------------
+# 9. Plot paired bead samples
+#
+# Lines connect the bottom and top sample from the same
+# independent bioreactor.
+# ------------------------------------------------------------
+
+p_beta_beads <- ggplot(
+  pcoa_bead_scores,
+  aes(
+    x = Axis1,
+    y = Axis2
+  )
+) +
+  geom_hline(
+    yintercept = 0,
+    linewidth = 0.35,
+    color = "grey75"
+  ) +
+  geom_vline(
+    xintercept = 0,
+    linewidth = 0.35,
+    color = "grey75"
+  ) +
+  geom_line(
+    aes(
+      group = bioreactor
+    ),
+    linewidth = 0.7,
+    alpha = 0.55,
+    color = "grey35"
+  ) +
+  geom_point(
+    aes(
+      fill = bead_position,
+      shape = bead_position
+    ),
+    size = 4,
+    color = "black",
+    stroke = 0.8
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Bottom" = "#E69F00",
+      "Top" = "#009E73"
+    ),
+    name = "Bead position"
+  ) +
+  scale_shape_manual(
+    values = c(
+      "Bottom" = 21,
+      "Top" = 24
+    ),
+    name = "Bead position"
+  ) +
+  labs(
+    x = paste0(
+      "PCoA axis 1 (",
+      round(pcoa_bead_axis1_pct, 1),
+      "%)"
+    ),
+    y = paste0(
+      "PCoA axis 2 (",
+      round(pcoa_bead_axis2_pct, 1),
+      "%)"
+    ),
+    caption = paste(
+      "Lines connect bottom and top samples from",
+      "the same independent bioreactor."
+    )
+  ) +
+  coord_equal() +
+  theme_bw(base_size = 11) +
+  theme(
+    legend.position = "top",
+    legend.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+p_beta_beads
+
+# ------------------------------------------------------------
+# 10. PERMDISP: bottom versus top bead communities
+#
+# PERMDISP asks whether the two positions differ in
+# multivariate dispersion. A significant result would make
+# PERMANOVA centroid differences harder to interpret.
+#
+# This diagnostic is not naturally paired, so it is interpreted
+# cautiously alongside the paired PERMANOVA.
+# ------------------------------------------------------------
+
+bead_dispersion <- vegan::betadisper(
+  bray_beads,
+  group = bead_meta$bead_position,
+  type = "centroid"
+)
+
+bead_permdisp_anova <- anova(
+  bead_dispersion
+)
+
+set.seed(12345)
+
+bead_permdisp_permutation <- vegan::permutest(
+  bead_dispersion,
+  permutations = 9999,
+  pairwise = FALSE
+)
+
+print(bead_permdisp_anova)
+print(bead_permdisp_permutation)
+
+bead_permdisp_summary <- tibble::tibble(
+  comparison = "Bottom versus top beads",
+  method = "PERMDISP",
+  statistic_F =
+    unname(
+      bead_permdisp_permutation$tab[1, "F"]
+    ),
+  p_value =
+    unname(
+      bead_permdisp_permutation$tab[1, "Pr(>F)"]
+    )
+)
+
+print(bead_permdisp_summary)
+
+# ------------------------------------------------------------
+# 11. Paired PERMANOVA
+#
+# Permutations are restricted within bioreactor so that each
+# bottom sample is exchangeable only with its paired top sample.
+#
+# With five paired bioreactors, there are at most 2^5 = 32
+# unique within-pair label arrangements, so the attainable
+# permutation p-values are necessarily coarse.
+# ------------------------------------------------------------
+
+permutation_control <- permute::how(
+  nperm = 9999
+)
+
+permute::setBlocks(
+  permutation_control
+) <- bead_meta$bioreactor
+
+set.seed(12345)
+
+bead_permanova <- vegan::adonis2(
+  bray_beads ~ bead_position,
+  data = as.data.frame(bead_meta),
+  permutations = permutation_control,
+  by = "margin"
+)
+
+print(bead_permanova)
+
+bead_permanova_summary <- tibble::tibble(
+  comparison = "Bottom versus top beads",
+  method = "Paired PERMANOVA",
+  df = bead_permanova[
+    "bead_position",
+    "Df"
+  ],
+  sum_of_squares = bead_permanova[
+    "bead_position",
+    "SumOfSqs"
+  ],
+  r_squared = bead_permanova[
+    "bead_position",
+    "R2"
+  ],
+  statistic_F = bead_permanova[
+    "bead_position",
+    "F"
+  ],
+  p_value = bead_permanova[
+    "bead_position",
+    "Pr(>F)"
+  ]
+)
+
+print(bead_permanova_summary)
+
+# ------------------------------------------------------------
+# 12. Calculate paired bottom-to-top Bray-Curtis distance
+#     for each bioreactor
+# ------------------------------------------------------------
+
+bray_bead_matrix <- as.matrix(
+  bray_beads
+)
+
+bead_pairs <- bead_meta %>%
+  dplyr::select(
+    sample_id,
+    bioreactor,
+    bead_position
+  ) %>%
+  tidyr::pivot_wider(
+    names_from = bead_position,
+    values_from = sample_id
+  )
+
+paired_bray_distances <- bead_pairs %>%
+  dplyr::rowwise() %>%
+  dplyr::mutate(
+    bray_curtis_bottom_top =
+      bray_bead_matrix[
+        Bottom,
+        Top
+      ]
+  ) %>%
+  dplyr::ungroup() %>%
+  tibble::as_tibble()
+
+print(paired_bray_distances, n = Inf)
+
+paired_bray_summary <- paired_bray_distances %>%
+  dplyr::summarise(
+    n_bioreactors = dplyr::n(),
+    mean_bray_curtis = mean(
+      bray_curtis_bottom_top
+    ),
+    sd_bray_curtis = stats::sd(
+      bray_curtis_bottom_top
+    ),
+    median_bray_curtis = stats::median(
+      bray_curtis_bottom_top
+    ),
+    minimum_bray_curtis = min(
+      bray_curtis_bottom_top
+    ),
+    maximum_bray_curtis = max(
+      bray_curtis_bottom_top
+    )
+  )
+
+print(paired_bray_summary)
+
+# ------------------------------------------------------------
+# 13. Optional descriptive treatment comparison in bottles
+#
+# This section does not perform inference. There is one T0
+# sample per treatment and two 96-h bottle replicates per
+# treatment, which is insufficient for a robust treatment-by-
+# time community analysis.
+# ------------------------------------------------------------
+
+batch_beta_scores <- pcoa_all_scores %>%
+  dplyr::filter(
+    sample_material == "Batch culture water"
+  ) %>%
+  dplyr::select(
+    sample_id,
+    Axis1,
+    Axis2,
+    treatment,
+    hours_elapsed,
+    bottle
+  )
+
+print(batch_beta_scores, n = Inf)
+
+# ------------------------------------------------------------
+# 14. Export tables and figures
+# ------------------------------------------------------------
+
+readr::write_csv(
+  pcoa_all_scores,
+  "results/community_beta_pcoa_all_samples.csv"
+)
+
+readr::write_csv(
+  pcoa_bead_scores,
+  "results/community_beta_pcoa_beads.csv"
+)
+
+readr::write_csv(
+  bead_permdisp_summary,
+  "results/community_beta_bead_permdisp.csv"
+)
+
+readr::write_csv(
+  bead_permanova_summary,
+  "results/community_beta_bead_paired_permanova.csv"
+)
+
+readr::write_csv(
+  paired_bray_distances,
+  "results/community_beta_paired_bray_distances.csv"
+)
+
+readr::write_csv(
+  paired_bray_summary,
+  "results/community_beta_paired_bray_summary.csv"
+)
+
+readr::write_csv(
+  batch_beta_scores,
+  "results/community_beta_batch_descriptive_scores.csv"
+)
+
+ggplot2::ggsave(
+  filename =
+    "figures/Figure_S6_community_beta_all_samples.pdf",
+  plot = p_beta_all,
+  width = 7.8,
+  height = 6.2
+)
+
+ggplot2::ggsave(
+  filename =
+    "figures/Figure_community_beta_bead_paired.pdf",
+  plot = p_beta_beads,
+  width = 7,
+  height = 6
+)
 ```
 
 ```{r}
-top_family_hits %>%
-  mutate(bullet = paste0("• ", Family, " (log2FC = ",
-                         round(log2FoldChange, 2),
-                         ", padj = ", signif(padj, 2),
-                         "; ", direction, ")")) %>%
-  pull(bullet)
+# ============================================================
+# Stage 4: Taxonomic composition and differential abundance
+#
+# Outputs:
+#   Figure 6a: phylum composition across all samples
+#   Figure 6b: Planctomycetota and Thermoproteota family
+#              composition in bead-associated communities
+#   ASV-level paired DESeq2 results: Top versus Bottom
+#   Family summaries of significant ASVs
+#
+# Statistical design:
+#   ~ bioreactor + bead_position
+#
+# This accounts for the paired design: one bottom and one top
+# bead sample from each of five independent bioreactors.
+# ============================================================
+
+library(tidyverse)
+library(phyloseq)
+library(DESeq2)
+library(patchwork)
+library(scales)
+
+dir.create("results", showWarnings = FALSE)
+dir.create("figures", showWarnings = FALSE)
+
+set.seed(12345)
+
+# ------------------------------------------------------------
+# 1. Identify taxonomy rank names robustly
+# ------------------------------------------------------------
+
+taxonomy_ranks <- phyloseq::rank_names(ASV_physeq)
+
+phylum_rank <- taxonomy_ranks[
+  tolower(taxonomy_ranks) == "phylum"
+][1]
+
+family_rank <- taxonomy_ranks[
+  tolower(taxonomy_ranks) == "family"
+][1]
+
+if (is.na(phylum_rank)) {
+  stop("No taxonomy rank matching 'Phylum' was found.")
+}
+
+if (is.na(family_rank)) {
+  stop("No taxonomy rank matching 'Family' was found.")
+}
+
+cat("Phylum rank:", phylum_rank, "\n")
+cat("Family rank:", family_rank, "\n")
+
+# ------------------------------------------------------------
+# 2. Clean taxonomy labels
+#
+# Replace missing or blank taxonomy labels before agglomeration.
+# Also correct the legacy spelling Thermoprotetoa.
+# ------------------------------------------------------------
+
+tax_clean <- as(
+  phyloseq::tax_table(ASV_physeq),
+  "matrix"
+)
+
+tax_clean[, phylum_rank] <- as.character(
+  tax_clean[, phylum_rank]
+)
+
+tax_clean[, family_rank] <- as.character(
+  tax_clean[, family_rank]
+)
+
+tax_clean[, phylum_rank][
+  is.na(tax_clean[, phylum_rank]) |
+    tax_clean[, phylum_rank] == ""
+] <- "Unclassified phylum"
+
+tax_clean[, phylum_rank][
+  tax_clean[, phylum_rank] == "Thermoprotetoa"
+] <- "Thermoproteota"
+
+tax_clean[, family_rank][
+  is.na(tax_clean[, family_rank]) |
+    tax_clean[, family_rank] == ""
+] <- "Unclassified family"
+
+# Collapse any incertae sedis labels to one family-level label
+# within the corresponding phylum.
+incertae_rows <- grepl(
+  "incertae",
+  tax_clean[, family_rank],
+  ignore.case = TRUE
+)
+
+tax_clean[incertae_rows, family_rank] <- paste0(
+  "Incertae sedis (",
+  tax_clean[incertae_rows, phylum_rank],
+  ")"
+)
+
+ASV_physeq_tax <- ASV_physeq
+phyloseq::tax_table(ASV_physeq_tax) <- phyloseq::tax_table(
+  tax_clean
+)
+
+# ------------------------------------------------------------
+# 3. Create consistent sample labels and ordering
+# ------------------------------------------------------------
+
+sample_plot_metadata <- sample_info %>%
+  tibble::rownames_to_column("sample_id_row") %>%
+  tibble::as_tibble() %>%
+  dplyr::mutate(
+    sample_id = dplyr::coalesce(
+      as.character(sample_id),
+      sample_id_row
+    ),
+
+    sample_group = dplyr::case_when(
+      sample_material == "Batch culture water" &
+        hours_elapsed == 0 &
+        treatment == "Ambient" ~
+        "Batch T0 — ambient",
+
+      sample_material == "Batch culture water" &
+        hours_elapsed == 0 &
+        treatment == "Diatom lysate" ~
+        "Batch T0 — diatom lysate",
+
+      sample_material == "Batch culture water" &
+        hours_elapsed > 0 &
+        treatment == "Ambient" ~
+        paste0("Batch 96 h — ambient — ", bottle),
+
+      sample_material == "Batch culture water" &
+        hours_elapsed > 0 &
+        treatment == "Diatom lysate" ~
+        paste0("Batch 96 h — diatom lysate — ", bottle),
+
+      sample_material == "Beads" &
+        bead_position == "Bottom" ~
+        paste0("BR", bioreactor, " — bottom"),
+
+      sample_material == "Beads" &
+        bead_position == "Top" ~
+        paste0("BR", bioreactor, " — top"),
+
+      sample_material == "Effluent" ~
+        "Five-column effluent",
+
+      TRUE ~ sample_id
+    )
+  )
+
+# Preserve the original curated metadata order.
+sample_levels <- sample_plot_metadata$sample_group
+
+sample_label_map <- setNames(
+  sample_plot_metadata$sample_group,
+  sample_plot_metadata$sample_id
+)
+
+# ------------------------------------------------------------
+# 4. Helper function: convert a phyloseq object to relative
+#    abundance while preserving zero-count samples safely
+# ------------------------------------------------------------
+
+to_relative_abundance <- function(ps_object) {
+
+  phyloseq::transform_sample_counts(
+    ps_object,
+    function(x) {
+      total <- sum(x)
+
+      if (total == 0) {
+        return(x)
+      }
+
+      x / total
+    }
+  )
+}
+
+# ============================================================
+# Figure 6a: Phylum composition across all samples
+# ============================================================
+
+# ------------------------------------------------------------
+# 5. Agglomerate to phylum and calculate relative abundance
+# ------------------------------------------------------------
+
+phylum_ps <- phyloseq::tax_glom(
+  ASV_physeq_tax,
+  taxrank = phylum_rank,
+  NArm = FALSE
+)
+
+phylum_rel_ps <- to_relative_abundance(phylum_ps)
+
+phylum_long <- phyloseq::psmelt(
+  phylum_rel_ps
+) %>%
+  tibble::as_tibble()
+
+# Remove metadata columns carried into psmelt().
+# Sample and Abundance remain the authoritative columns from
+# the phyloseq object.
+phylum_long <- phylum_long %>%
+  dplyr::select(
+    Sample,
+    Abundance,
+    dplyr::all_of(phylum_rank)
+  ) %>%
+  dplyr::rename(
+    sample_id = Sample,
+    relative_abundance = Abundance
+  ) %>%
+  dplyr::mutate(
+    Phylum = as.character(
+      .data[[phylum_rank]]
+    )
+  ) %>%
+  dplyr::select(
+    sample_id,
+    relative_abundance,
+    Phylum
+  ) %>%
+  dplyr::left_join(
+    sample_plot_metadata %>%
+      dplyr::select(
+        sample_id,
+        sample_group,
+        sample_material,
+        bead_position,
+        treatment,
+        hours_elapsed
+      ),
+    by = "sample_id"
+  )
+
+# Confirm that the expected columns are now present.
+stopifnot(
+  all(
+    c(
+      "sample_id",
+      "relative_abundance",
+      "Phylum",
+      "sample_group",
+      "sample_material",
+      "bead_position",
+      "treatment",
+      "hours_elapsed"
+    ) %in% names(phylum_long)
+  )
+)
+
+names(phylum_long)
+
+# ------------------------------------------------------------
+# 6. Retain phyla reaching at least 5% in any sample;
+#    combine the remainder as "Other"
+# ------------------------------------------------------------
+
+major_phyla <- phylum_long %>%
+  dplyr::group_by(Phylum) %>%
+  dplyr::summarise(
+    maximum_relative_abundance = max(
+      relative_abundance,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  ) %>%
+  dplyr::filter(
+    maximum_relative_abundance >= 0.05
+  ) %>%
+  dplyr::pull(Phylum)
+
+phylum_plot_data <- phylum_long %>%
+  dplyr::mutate(
+    Phylum_plot = dplyr::if_else(
+      Phylum %in% major_phyla,
+      Phylum,
+      "Other"
+    )
+  ) %>%
+  dplyr::group_by(
+    sample_id,
+    sample_group,
+    sample_material,
+    bead_position,
+    treatment,
+    hours_elapsed,
+    Phylum_plot
+  ) %>%
+  dplyr::summarise(
+    relative_abundance = sum(
+      relative_abundance,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(
+    sample_group = factor(
+      sample_group,
+      levels = sample_levels
+    )
+  )
+
+# ------------------------------------------------------------
+# 7. Order phyla in the legend
+#
+# Highlight Planctomycetota and Thermoproteota, then order the
+# remaining major phyla by maximum relative abundance.
+# ------------------------------------------------------------
+
+highlight_phyla <- intersect(
+  c(
+    "Planctomycetota",
+    "Thermoproteota"
+  ),
+  unique(phylum_plot_data$Phylum_plot)
+)
+
+remaining_phyla <- phylum_plot_data %>%
+  dplyr::filter(
+    !Phylum_plot %in% c(
+      highlight_phyla,
+      "Other",
+      "Unclassified phylum"
+    )
+  ) %>%
+  dplyr::group_by(Phylum_plot) %>%
+  dplyr::summarise(
+    maximum_abundance = max(
+      relative_abundance,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  ) %>%
+  dplyr::arrange(
+    dplyr::desc(maximum_abundance)
+  ) %>%
+  dplyr::pull(Phylum_plot)
+
+special_phyla <- intersect(
+  c(
+    "Unclassified phylum",
+    "Other"
+  ),
+  unique(phylum_plot_data$Phylum_plot)
+)
+
+phylum_levels <- c(
+  highlight_phyla,
+  remaining_phyla,
+  special_phyla
+)
+
+phylum_plot_data <- phylum_plot_data %>%
+  dplyr::mutate(
+    Phylum_plot = factor(
+      Phylum_plot,
+      levels = phylum_levels
+    )
+  )
+
+# ------------------------------------------------------------
+# 8. Phylum colors
+# ------------------------------------------------------------
+
+phylum_highlight_colors <- c(
+  "Planctomycetota" = "#3E8FB0",
+  "Thermoproteota" = "#D95F02"
+)
+
+remaining_greys <- grDevices::gray.colors(
+  n = length(remaining_phyla),
+  start = 0.20,
+  end = 0.78
+)
+
+names(remaining_greys) <- remaining_phyla
+
+special_colors <- c(
+  "Unclassified phylum" = "#BEBEBE",
+  "Other" = "#D9D9D9"
+)
+
+phylum_colors <- c(
+  phylum_highlight_colors[
+    names(phylum_highlight_colors) %in% highlight_phyla
+  ],
+  remaining_greys,
+  special_colors[
+    names(special_colors) %in% special_phyla
+  ]
+)
+
+# ------------------------------------------------------------
+# 9. Plot phylum composition
+# ------------------------------------------------------------
+
+p_phylum <- ggplot(
+  phylum_plot_data,
+  aes(
+    x = sample_group,
+    y = relative_abundance,
+    fill = Phylum_plot
+  )
+) +
+  geom_col(
+    width = 0.72
+  ) +
+  scale_fill_manual(
+    values = phylum_colors,
+    breaks = phylum_levels,
+    drop = FALSE,
+    name = "Phylum"
+  ) +
+  scale_y_continuous(
+    labels = scales::label_percent(
+      accuracy = 1
+    ),
+    expand = expansion(
+      mult = c(0, 0.02)
+    )
+  ) +
+  labs(
+    x = NULL,
+    y = "Relative abundance"
+  ) +
+  theme_bw(base_size = 10.5) +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(
+      face = "bold"
+    ),
+    axis.text.x = element_text(
+      angle = 55,
+      hjust = 1,
+      vjust = 1
+    ),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank()
+  ) + 
+  guides(
+    fill = guide_legend(
+        nrow = 2,
+        byrow = TRUE
+    )
+)
+
+p_phylum
+
+# ============================================================
+# Figure 6b: Family composition of Planctomycetota and
+#            Thermoproteota in bead samples
+# ============================================================
+
+# ------------------------------------------------------------
+# 10. Subset bead samples, agglomerate to family, and calculate
+#     abundance as a fraction of the entire sample
+# ------------------------------------------------------------
+
+bead_ps <- phyloseq::subset_samples(
+  ASV_physeq_tax,
+  sample_material == "Beads"
+)
+
+bead_ps <- phyloseq::prune_taxa(
+  phyloseq::taxa_sums(bead_ps) > 0,
+  bead_ps
+)
+
+family_bead_ps <- phyloseq::tax_glom(
+  bead_ps,
+  taxrank = family_rank,
+  NArm = FALSE
+)
+
+family_bead_rel_ps <- to_relative_abundance(
+  family_bead_ps
+)
+
+family_bead_long <- phyloseq::psmelt(
+  family_bead_rel_ps
+) %>%
+  tibble::as_tibble()
+
+if ("sample_id" %in% names(family_bead_long)) {
+  family_bead_long <- family_bead_long %>%
+    dplyr::select(-sample_id)
+}
+
+# ------------------------------------------------------------
+# Family composition for Planctomycetota and Thermoproteota
+# in bead-associated samples
+# ------------------------------------------------------------
+
+family_bead_long <- phyloseq::psmelt(
+  family_bead_rel_ps
+) %>%
+  tibble::as_tibble() %>%
+  dplyr::select(
+    Sample,
+    Abundance,
+    dplyr::all_of(phylum_rank),
+    dplyr::all_of(family_rank)
+  ) %>%
+  dplyr::rename(
+    sample_id = Sample,
+    relative_abundance = Abundance
+  ) %>%
+  dplyr::mutate(
+    Phylum = as.character(.data[[phylum_rank]]),
+    Family = as.character(.data[[family_rank]])
+  ) %>%
+  dplyr::select(
+    sample_id,
+    relative_abundance,
+    Phylum,
+    Family
+  ) %>%
+  dplyr::filter(
+    Phylum %in% c(
+      "Planctomycetota",
+      "Thermoproteota"
+    )
+  ) %>%
+  dplyr::left_join(
+    sample_plot_metadata %>%
+      dplyr::select(
+        sample_id,
+        sample_group,
+        bead_position,
+        bioreactor
+      ),
+    by = "sample_id"
+  ) %>%
+  dplyr::mutate(
+    sample_group = factor(
+      sample_group,
+      levels = sample_levels
+    )
+  )
+
+stopifnot(
+  all(
+    c(
+      "sample_id",
+      "relative_abundance",
+      "Phylum",
+      "Family",
+      "sample_group",
+      "bead_position",
+      "bioreactor"
+    ) %in% names(family_bead_long)
+  )
+)
+
+# Retain families reaching at least 1% of the whole sample
+# in at least one bead sample.
+major_families <- family_bead_long %>%
+  dplyr::group_by(
+    Phylum,
+    Family
+  ) %>%
+  dplyr::summarise(
+    maximum_relative_abundance = max(
+      relative_abundance,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  ) %>%
+  dplyr::filter(
+    maximum_relative_abundance >= 0.01
+  )
+
+family_bead_plot_data <- family_bead_long %>%
+  dplyr::left_join(
+    major_families %>%
+      dplyr::mutate(
+        retain_family = TRUE
+      ) %>%
+      dplyr::select(
+        Phylum,
+        Family,
+        retain_family
+      ),
+    by = c(
+      "Phylum",
+      "Family"
+    )
+  ) %>%
+  dplyr::mutate(
+    Family_plot = dplyr::case_when(
+      retain_family %in% TRUE ~ Family,
+      TRUE ~ paste0(
+        "Other ",
+        Phylum,
+        " families"
+      )
+    )
+  ) %>%
+  dplyr::group_by(
+    sample_id,
+    sample_group,
+    bead_position,
+    bioreactor,
+    Phylum,
+    Family_plot
+  ) %>%
+  dplyr::summarise(
+    relative_abundance = sum(
+      relative_abundance,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+
+print(
+  family_bead_plot_data,
+  n = Inf
+)
+# ------------------------------------------------------------
+# 11. Collapse low-abundance families within each phylum
+#
+# Retain families that reach at least 1% of the whole sample
+# in at least one bead sample.
+# ------------------------------------------------------------
+
+major_families <- family_bead_long %>%
+  dplyr::group_by(
+    Phylum,
+    Family
+  ) %>%
+  dplyr::summarise(
+    maximum_relative_abundance = max(
+      relative_abundance,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  ) %>%
+  dplyr::filter(
+    maximum_relative_abundance >= 0.01
+  )
+
+family_bead_plot_data <- family_bead_long %>%
+  dplyr::left_join(
+    major_families %>%
+      dplyr::mutate(
+        retain_family = TRUE
+      ) %>%
+      dplyr::select(
+        Phylum,
+        Family,
+        retain_family
+      ),
+    by = c(
+      "Phylum",
+      "Family"
+    )
+  ) %>%
+  dplyr::mutate(
+    Family_plot = dplyr::case_when(
+      retain_family %in% TRUE ~ Family,
+      TRUE ~ paste0(
+        "Other ",
+        Phylum,
+        " families"
+      )
+    )
+  ) %>%
+  dplyr::group_by(
+    sample_id,
+    sample_group,
+    bead_position,
+    bioreactor,
+    Phylum,
+    Family_plot
+  ) %>%
+  dplyr::summarise(
+    relative_abundance = sum(
+      relative_abundance,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+
+# ------------------------------------------------------------
+# 12. Generate family colors by phylum
+# ------------------------------------------------------------
+
+plancto_families <- family_bead_plot_data %>%
+  dplyr::filter(
+    Phylum == "Planctomycetota"
+  ) %>%
+  dplyr::distinct(Family_plot) %>%
+  dplyr::pull(Family_plot)
+
+thermo_families <- family_bead_plot_data %>%
+  dplyr::filter(
+    Phylum == "Thermoproteota"
+  ) %>%
+  dplyr::distinct(Family_plot) %>%
+  dplyr::pull(Family_plot)
+
+plancto_core <- setdiff(
+  plancto_families,
+  "Other Planctomycetota families"
+)
+
+thermo_core <- setdiff(
+  thermo_families,
+  "Other Thermoproteota families"
+)
+
+plancto_palette <- grDevices::colorRampPalette(
+  c(
+    "#2A7189",
+    "#72AEC2",
+    "#C4E1EA"
+  )
+)
+
+thermo_palette <- grDevices::colorRampPalette(
+  c(
+    "#B94E00",
+    "#E38B4D",
+    "#F6C9A8"
+  )
+)
+
+plancto_colors <- plancto_palette(
+  max(
+    length(plancto_core),
+    1
+  )
+)[seq_along(plancto_core)]
+
+names(plancto_colors) <- plancto_core
+
+thermo_colors <- thermo_palette(
+  max(
+    length(thermo_core),
+    1
+  )
+)[seq_along(thermo_core)]
+
+names(thermo_colors) <- thermo_core
+
+family_special_colors <- c(
+  "Other Planctomycetota families" = "grey75",
+  "Other Thermoproteota families" = "grey55"
+)
+
+family_colors <- c(
+  plancto_colors,
+  thermo_colors,
+  family_special_colors[
+    names(family_special_colors) %in%
+      unique(family_bead_plot_data$Family_plot)
+  ]
+)
+
+family_levels <- c(
+  thermo_core,
+  "Other Thermoproteota families",
+  plancto_core,
+  "Other Planctomycetota families"
+)
+
+family_levels <- family_levels[
+  family_levels %in%
+    unique(family_bead_plot_data$Family_plot)
+]
+
+family_bead_plot_data <- family_bead_plot_data %>%
+  dplyr::mutate(
+    Family_plot = factor(
+      Family_plot,
+      levels = family_levels
+    )
+  )
+
+# ------------------------------------------------------------
+# 13. Plot family abundance as a fraction of the whole sample
+#
+# Bars do not sum to 100% because only two selected phyla are
+# displayed. This is preferable to normalizing within phylum,
+# because it preserves differences in total phylum abundance.
+# ------------------------------------------------------------
+
+p_family <- ggplot(
+  family_bead_plot_data,
+  aes(
+    x = sample_group,
+    y = relative_abundance,
+    fill = Family_plot
+  )
+) +
+  geom_col(
+    width = 0.72
+  ) +
+  facet_wrap(
+    ~ Phylum,
+    ncol = 1,
+    scales = "free_y"
+  ) +
+  scale_fill_manual(
+    values = family_colors,
+    breaks = family_levels,
+    drop = FALSE,
+    name = "Family"
+  ) +
+  scale_y_continuous(
+    labels = scales::label_percent(
+      accuracy = 1
+    ),
+    expand = expansion(
+      mult = c(0, 0.04)
+    )
+  ) +
+  labs(
+    x = NULL,
+    y = "Relative abundance within sample"
+  ) +
+  theme_bw(base_size = 10.5) +
+  theme(
+    legend.position = "right",
+    legend.title = element_text(
+      face = "bold"
+    ),
+    axis.text.x = element_text(
+      angle = 35,
+      hjust = 1,
+      vjust = 1
+    ),
+    strip.background = element_rect(
+      fill = "white"
+    ),
+    strip.text = element_text(
+      face = "bold"
+    ),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+p_family
+
+# ============================================================
+# Figure 6b better
+# Planctomycetota family composition
+# ============================================================
+
+plancto_plot <- family_bead_plot_data %>%
+  filter(Phylum == "Planctomycetota")
+
+# order families by overall abundance
+family_order <- plancto_plot %>%
+  group_by(Family_plot) %>%
+  summarise(total = sum(relative_abundance),
+            .groups = "drop") %>%
+  arrange(desc(total)) %>%
+  pull(Family_plot)
+
+plancto_plot <- plancto_plot %>%
+  mutate(
+    Family_plot = factor(
+      Family_plot,
+      levels = family_order
+    )
+  )
+
+plancto_cols <- c(
+  "Pirellulaceae"                     = "#0B4F6C",
+  "Gimesiaceae"                       = "#2A6F97",
+  "Rubinisphaeraceae"                 = "#468FAF",
+  "Phycisphaeraceae"                  = "#61A5C2",
+  "Incertae sedis (Planctomycetota)"  = "#89C2D9",
+  "Unclassified family"               = "#B5E2FA",
+  "Other Planctomycetota families"    = "grey80"
+)
+
+p_family <- ggplot(
+  plancto_plot,
+  aes(
+    x = sample_group,
+    y = relative_abundance,
+    fill = Family_plot
+  )
+) +
+  geom_col(width = 0.72) +
+  scale_fill_manual(
+    values = plancto_cols,
+    drop = FALSE,
+    name = "Planctomycetota family"
+  ) +
+  scale_y_continuous(
+    labels = scales::label_percent(),
+    expand = expansion(mult = c(0,0.03))
+  ) +
+  labs(
+    x = NULL,
+    y = "Relative abundance of total community (%)"
+  ) +
+  theme_bw(base_size = 11) +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(face="bold"),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    ),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank()
+  )
+
+# ------------------------------------------------------------
+# 14. Combine Figure 6
+# ------------------------------------------------------------
+
+fig6 <- (
+  p_phylum +
+    labs(tag = "a")
+) /
+  (
+    p_family +
+      labs(tag = "b")
+  ) +
+  patchwork::plot_layout(
+    heights = c(
+      1,
+      1.15
+    ),
+    # guides = "collect"
+  ) +
+  patchwork::plot_annotation(
+    theme = theme(
+      plot.tag = element_text(
+        face = "bold",
+        size = 12
+      ),
+      legend.position = "bottom"
+    )
+  )
+
+fig6
+
+# ============================================================
+# Paired ASV-level differential abundance
+# ============================================================
+
+# ------------------------------------------------------------
+# 15. Create bead-only raw count and metadata matrices
+# ------------------------------------------------------------
+
+bead_ps_raw <- phyloseq::subset_samples(
+  ASV_physeq_tax,
+  sample_material == "Beads" &
+    !is.na(bead_position) &
+    !is.na(bioreactor)
+)
+
+bead_ps_raw <- phyloseq::prune_taxa(
+  phyloseq::taxa_sums(bead_ps_raw) > 0,
+  bead_ps_raw
+)
+
+bead_count_matrix <- as(
+  phyloseq::otu_table(bead_ps_raw),
+  "matrix"
+)
+
+if (!phyloseq::taxa_are_rows(bead_ps_raw)) {
+  bead_count_matrix <- t(
+    bead_count_matrix
+  )
+}
+
+storage.mode(bead_count_matrix) <- "integer"
+
+bead_deseq_metadata <- data.frame(
+  phyloseq::sample_data(bead_ps_raw)
+) %>%
+  tibble::as_tibble()
+
+# sample_id already exists from Stage 1. Add it defensively if
+# needed.
+if (!"sample_id" %in% names(bead_deseq_metadata)) {
+
+  bead_deseq_metadata$sample_id <-
+    phyloseq::sample_names(
+      bead_ps_raw
+    )
+}
+
+# Match metadata order to the count-matrix columns.
+bead_deseq_metadata <- bead_deseq_metadata %>%
+  dplyr::slice(
+    match(
+      colnames(bead_count_matrix),
+      sample_id
+    )
+  ) %>%
+  dplyr::mutate(
+    bioreactor = factor(
+      bioreactor
+    ),
+
+    bead_position = factor(
+      bead_position,
+      levels = c(
+        "Bottom",
+        "Top"
+      )
+    )
+  ) %>%
+  as.data.frame()
+
+rownames(bead_deseq_metadata) <-
+  bead_deseq_metadata$sample_id
+
+stopifnot(
+  identical(
+    colnames(bead_count_matrix),
+    rownames(bead_deseq_metadata)
+  )
+)
+
+# Confirm paired structure.
+bead_deseq_pair_check <- bead_deseq_metadata %>%
+  tibble::rownames_to_column(
+    "sample_id_check"
+  ) %>%
+  tibble::as_tibble() %>%
+  dplyr::count(
+    bioreactor,
+    bead_position,
+    name = "n",
+    .drop = FALSE
+  )
+
+print(
+  bead_deseq_pair_check,
+  n = Inf
+)
+
+if (any(bead_deseq_pair_check$n != 1)) {
+  stop(
+    "DESeq2 requires one bottom and one top sample ",
+    "from each bioreactor."
+  )
+}
+
+# ------------------------------------------------------------
+# 16. Filter extremely sparse ASVs before DESeq2
+#
+# Retain ASVs with at least 10 reads in at least two bead
+# samples. This reduces uninformative multiple testing without
+# imposing an effect-size filter.
+# ------------------------------------------------------------
+
+keep_asvs <- rowSums(
+  bead_count_matrix >= 10
+) >= 2
+
+bead_count_matrix_filtered <-
+  bead_count_matrix[
+    keep_asvs,
+    ,
+    drop = FALSE
+  ]
+
+cat(
+  "ASVs before DESeq2 filtering:",
+  nrow(bead_count_matrix),
+  "\n"
+)
+
+cat(
+  "ASVs after DESeq2 filtering:",
+  nrow(bead_count_matrix_filtered),
+  "\n"
+)
+
+# ------------------------------------------------------------
+# 17. Fit paired DESeq2 model
+#
+# Top-versus-bottom effect is estimated after controlling for
+# the identity of each bioreactor.
+# ------------------------------------------------------------
+
+dds_asv <- DESeq2::DESeqDataSetFromMatrix(
+  countData = bead_count_matrix_filtered,
+  colData = bead_deseq_metadata,
+  design = ~ bioreactor + bead_position
+)
+
+dds_asv <- DESeq2::estimateSizeFactors(
+  dds_asv,
+  type = "poscounts"
+)
+
+dds_asv <- DESeq2::DESeq(
+  dds_asv,
+  fitType = "parametric"
+)
+
+DESeq2::resultsNames(
+  dds_asv
+)
+
+res_asv <- DESeq2::results(
+  dds_asv,
+  contrast = c(
+    "bead_position",
+    "Top",
+    "Bottom"
+  ),
+  alpha = 0.05
+)
+
+# Positive log2 fold change means enrichment at the top.
+# Negative log2 fold change means enrichment at the bottom.
+
+# ------------------------------------------------------------
+# 18. Join ASV-level DESeq2 results to taxonomy
+# ------------------------------------------------------------
+
+taxonomy_table <- as.data.frame(
+  phyloseq::tax_table(
+    ASV_physeq_tax
+  )
+) %>%
+  tibble::rownames_to_column(
+    "ASV"
+  ) %>%
+  tibble::as_tibble()
+
+res_asv_tax <- as.data.frame(
+  res_asv
+) %>%
+  tibble::rownames_to_column(
+    "ASV"
+  ) %>%
+  tibble::as_tibble() %>%
+  dplyr::left_join(
+    taxonomy_table,
+    by = "ASV"
+  ) %>%
+  dplyr::mutate(
+    direction = dplyr::case_when(
+      is.na(padj) ~ "Not tested or unresolved",
+      padj >= 0.05 ~ "Not significant",
+      log2FoldChange > 0 ~ "Enriched at top",
+      log2FoldChange < 0 ~ "Enriched at bottom",
+      TRUE ~ "No directional change"
+    ),
+
+    significant = !is.na(padj) &
+      padj < 0.05
+  ) %>%
+  dplyr::arrange(
+    padj,
+    dplyr::desc(
+      abs(log2FoldChange)
+    )
+  )
+
+res_asv_significant <- res_asv_tax %>%
+  dplyr::filter(
+    significant
+  )
+
+cat(
+  "Significant ASVs at FDR < 0.05:",
+  nrow(res_asv_significant),
+  "\n"
+)
+
+cat(
+  "Enriched at top:",
+  sum(
+    res_asv_significant$log2FoldChange > 0,
+    na.rm = TRUE
+  ),
+  "\n"
+)
+
+cat(
+  "Enriched at bottom:",
+  sum(
+    res_asv_significant$log2FoldChange < 0,
+    na.rm = TRUE
+  ),
+  "\n"
+)
+
+# ------------------------------------------------------------
+# 19. Summarize significant ASVs by family
+#
+# This is a descriptive aggregation of significant ASV-level
+# results. It is not a separate family-level statistical test.
+# ------------------------------------------------------------
+
+significant_family_summary <- res_asv_significant %>%
+  dplyr::mutate(
+    Family_summary = dplyr::if_else(
+      is.na(.data[[family_rank]]) |
+        .data[[family_rank]] == "",
+      paste0(
+        "Unclassified family (",
+        .data[[phylum_rank]],
+        ")"
+      ),
+      as.character(
+        .data[[family_rank]]
+      )
+    )
+  ) %>%
+  dplyr::group_by(
+    Phylum = .data[[phylum_rank]],
+    Family = Family_summary,
+    direction
+  ) %>%
+  dplyr::summarise(
+    n_significant_asvs = dplyr::n(),
+    median_log2_fold_change = median(
+      log2FoldChange,
+      na.rm = TRUE
+    ),
+    minimum_adjusted_p = min(
+      padj,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  ) %>%
+  dplyr::arrange(
+    dplyr::desc(
+      n_significant_asvs
+    ),
+    minimum_adjusted_p
+  )
+
+print(
+  significant_family_summary,
+  n = Inf
+)
+
+# ------------------------------------------------------------
+# 20. Create concise top-hit tables
+# ------------------------------------------------------------
+
+top_asv_hits <- res_asv_significant %>%
+  dplyr::select(
+    ASV,
+    all_of(phylum_rank),
+    all_of(family_rank),
+    log2FoldChange,
+    lfcSE,
+    pvalue,
+    padj,
+    direction
+  ) %>%
+  dplyr::slice_head(
+    n = 20
+  )
+
+top_family_hits <- significant_family_summary %>%
+  dplyr::slice_head(
+    n = 20
+  )
+
+print(
+  top_asv_hits,
+  n = Inf
+)
+
+print(
+  top_family_hits,
+  n = Inf
+)
+
+# ============================================================
+# Export figures and reporting tables
+# ============================================================
+
+readr::write_csv(
+  phylum_plot_data,
+  "results/Figure6a_phylum_composition_data.csv"
+)
+
+readr::write_csv(
+  family_bead_plot_data,
+  "results/Figure6b_family_composition_data.csv"
+)
+
+readr::write_csv(
+  res_asv_tax,
+  "results/community_deseq2_asv_all_results.csv"
+)
+
+readr::write_csv(
+  res_asv_significant,
+  "results/community_deseq2_asv_significant.csv"
+)
+
+readr::write_csv(
+  significant_family_summary,
+  "results/community_deseq2_significant_asvs_by_family.csv"
+)
+
+readr::write_csv(
+  top_asv_hits,
+  "results/community_deseq2_top_asv_hits.csv"
+)
+
+readr::write_csv(
+  top_family_hits,
+  "results/community_deseq2_top_family_summaries.csv"
+)
+
+ggplot2::ggsave(
+  filename = "figures/Figure_6_community_composition.pdf",
+  plot = fig6,
+  width = 12,
+  height = 10
+)
+
 ```
+
+
+
+
+
+
 

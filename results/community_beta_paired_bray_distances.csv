@@ -1,0 +1,6 @@
+bioreactor,Bottom,Top,bray_curtis_bottom_top
+5,N-BR5-B_S99_F_filt.fastq,N-BR5-T_S100_F_filt.fastq,0.6754228983020102
+6,N-BR6-B_S101_F_filt.fastq,N-BR6-T_S102_F_filt.fastq,0.7486248136313954
+8,N-BR8-B_S103_F_filt.fastq,N-BR8-T_S104_F_filt.fastq,0.6893477139423675
+9,N-BR9-B_S105_F_filt.fastq,N-BR9-T_S106_F_filt.fastq,0.8385636334637424
+10,N-BR10-B_S107_F_filt.fastq,N-BR10-T_S108_F_filt.fastq,0.7849778364987151

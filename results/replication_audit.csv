@@ -1,0 +1,266 @@
+exp,date,water_lab,trt_lab,stage,bioreactor,flow_rate_ml_min,hours_elapsed,duplicate_key_count
+BR15-11,2015-09-23,Goleta Pier,surface,NA,NA,NA,0,2
+BR15-11,2015-09-23,Goleta Pier,surface,NA,NA,NA,12,2
+BR15-11,2015-09-23,Goleta Pier,surface,NA,NA,NA,24,2
+BR15-11,2015-09-23,Goleta Pier,surface,NA,NA,NA,36,2
+BR15-11,2015-09-23,Goleta Pier,surface,NA,NA,NA,48,2
+BR15-11,2015-09-23,Goleta Pier,surface,NA,NA,NA,60,2
+BR15-11,2015-09-23,Goleta Pier,surface,NA,NA,NA,72,2
+BR15-11,2015-09-23,Goleta Pier,surface,NA,NA,NA,84,2
+BR15-11,2015-09-23,Goleta Pier,surface,NA,NA,NA,96,2
+BR15-11,2015-09-23,Goleta Pier,surface,NA,NA,NA,120,2
+BR15-11,2015-09-23,Goleta Pier,surface,NA,NA,NA,144,2
+BR15-11,2015-09-23,Goleta Pier,surface,NA,NA,NA,168,2
+BR15-11,2015-09-23,Goleta Pier,surface,NA,NA,NA,360,2
+BR15-11,2015-09-23,Goleta Pier,surface,NA,NA,NA,396,2
+BR16-1,2016-01-21,Goleta Pier,surface,NA,NA,NA,0,2
+BR16-1,2016-01-21,Goleta Pier,surface,NA,NA,NA,12,2
+BR16-1,2016-01-22,Goleta Pier,surface,NA,NA,NA,0,2
+BR16-1,2016-01-22,Goleta Pier,surface,NA,NA,NA,12,2
+BR16-1,2016-01-22,Goleta Pier,surface,NA,NA,NA,36,2
+BR16-1,2016-01-23,Goleta Pier,surface,NA,NA,NA,0,2
+BR16-1,2016-01-23,Goleta Pier,surface,NA,NA,NA,12,2
+BR16-1,2016-01-23,Goleta Pier,surface,NA,NA,NA,36,2
+BR16-1,2016-01-23,Goleta Pier,surface,NA,NA,NA,48,2
+BR16-1,2016-01-24,Goleta Pier,surface,NA,NA,NA,0,2
+BR16-1,2016-01-24,Goleta Pier,surface,NA,NA,NA,12,2
+BR16-1,2016-01-24,Goleta Pier,surface,NA,NA,NA,36,2
+BR16-1,2016-01-24,Goleta Pier,surface,NA,NA,NA,48,2
+BR16-1,2016-01-24,Goleta Pier,surface,NA,NA,NA,72,2
+BR16-1,2016-01-25,Goleta Pier,surface,NA,NA,NA,36,2
+BR16-1,2016-01-25,Goleta Pier,surface,NA,NA,NA,48,2
+BR16-1,2016-01-25,Goleta Pier,surface,NA,NA,NA,72,2
+BR16-1,2016-01-25,Goleta Pier,surface,NA,NA,NA,96,2
+BR16-1,2016-01-26,Goleta Pier,surface,NA,NA,NA,48,2
+BR16-1,2016-01-26,Goleta Pier,surface,NA,NA,NA,72,2
+BR16-1,2016-01-26,Goleta Pier,surface,NA,NA,NA,96,2
+BR16-1,2016-01-26,Goleta Pier,surface,NA,NA,NA,120,2
+BR16-1,2016-01-27,Goleta Pier,surface,NA,NA,NA,72,2
+BR16-1,2016-01-27,Goleta Pier,surface,NA,NA,NA,96,2
+BR16-1,2016-01-27,Goleta Pier,surface,NA,NA,NA,120,2
+BR16-1,2016-01-28,Goleta Pier,surface,NA,NA,NA,96,2
+BR16-1,2016-01-28,Goleta Pier,surface,NA,NA,NA,120,2
+BR16-1,2016-01-28,Goleta Pier,surface,NA,NA,NA,168,2
+BR16-1,2016-01-29,Goleta Pier,surface,NA,NA,NA,120,2
+BR16-1,2016-01-29,Goleta Pier,surface,NA,NA,NA,168,2
+BR16-1,2016-01-30,Goleta Pier,surface,NA,NA,NA,168,2
+BR16-1,2016-01-31,Goleta Pier,surface,NA,NA,NA,240,2
+BR16-1,2016-02-01,Goleta Pier,surface,NA,NA,NA,168,2
+BR16-1,2016-02-01,Goleta Pier,surface,NA,NA,NA,240,2
+BR16-1,2016-02-02,Goleta Pier,surface,NA,NA,NA,288,2
+BR16-1,2016-02-03,Goleta Pier,surface,NA,NA,NA,240,2
+BR16-1,2016-02-03,Goleta Pier,surface,NA,NA,NA,288,2
+BR16-1,2016-02-04,Goleta Pier,surface,NA,NA,NA,240,2
+BR16-1,2016-02-05,Goleta Pier,surface,NA,NA,NA,288,2
+BR16-1,2016-02-06,Goleta Pier,surface,NA,NA,NA,288,2
+BR16-3,2016-10-11,Goleta Pier,diatom lysate,NA,NA,NA,0,2
+BR16-3,2016-10-11,Goleta Pier,surface,NA,NA,NA,0,2
+BR16-3,2016-10-12,Goleta Pier,diatom lysate,NA,NA,NA,24,2
+BR16-3,2016-10-12,Goleta Pier,surface,NA,NA,NA,24,2
+BR16-3,2016-10-13,Goleta Pier,diatom lysate,NA,NA,NA,48,2
+BR16-3,2016-10-13,Goleta Pier,surface,NA,NA,NA,48,2
+BR16-3,2016-10-14,Goleta Pier,diatom lysate,NA,NA,NA,72,2
+BR16-3,2016-10-14,Goleta Pier,surface,NA,NA,NA,72,2
+BR16-3,2016-10-15,Goleta Pier,diatom lysate,NA,NA,NA,96,2
+BR16-3,2016-10-15,Goleta Pier,surface,NA,NA,NA,96,2
+BR16-3,2016-10-16,Goleta Pier,diatom lysate,NA,NA,NA,120,2
+BR16-3,2016-10-16,Goleta Pier,surface,NA,NA,NA,120,2
+BR16-3,2016-10-17,Goleta Pier,diatom lysate,NA,NA,NA,144,2
+BR16-3,2016-10-17,Goleta Pier,surface,NA,NA,NA,144,2
+BR16-3,2016-10-18,Goleta Pier,diatom lysate,NA,NA,NA,168,2
+BR16-3,2016-10-18,Goleta Pier,surface,NA,NA,NA,168,2
+BR16-3,2016-10-25,Goleta Pier,diatom lysate,NA,NA,NA,336,2
+BR16-3,2016-10-25,Goleta Pier,surface,NA,NA,NA,336,2
+BR16-3,2016-11-08,Goleta Pier,diatom lysate,NA,NA,NA,672,2
+BR16-3,2016-11-08,Goleta Pier,surface,NA,NA,NA,672,2
+BR16-3,2016-11-22,Goleta Pier,diatom lysate,NA,NA,NA,1008,2
+BR16-3,2016-11-22,Goleta Pier,surface,NA,NA,NA,1008,2
+BR16-3,2016-12-06,Goleta Pier,diatom lysate,NA,NA,NA,1344,2
+BR16-3,2016-12-06,Goleta Pier,surface,NA,NA,NA,1344,2
+BR16-3,2016-12-20,Goleta Pier,diatom lysate,NA,NA,NA,1680,2
+BR16-3,2016-12-20,Goleta Pier,surface,NA,NA,NA,1680,2
+BR14-1,2014-09-19,UCSB intake,ambient,0,NA,NA,0,1
+BR14-1,2014-09-19,UCSB intake,ambient,1,1,4,4,1
+BR14-1,2014-09-19,UCSB intake,ambient,1,3,4,4,1
+BR14-1,2014-09-19,UCSB intake,ambient,1,5,4,4,1
+BR14-1,2014-09-19,UCSB intake,ambient,1,7,4,4,1
+BR14-2,2014-09-30,UCSB intake,ambient,0,NA,NA,0,1
+BR14-2,2014-09-30,UCSB intake,ambient,1,1,4,4,1
+BR14-2,2014-09-30,UCSB intake,ambient,1,3,4,4,1
+BR14-2,2014-09-30,UCSB intake,ambient,1,5,4,4,1
+BR14-2,2014-09-30,UCSB intake,ambient,1,7,4,4,1
+BR14-3,2014-10-14,UCSB intake,ambient,0,NA,NA,0,1
+BR14-3,2014-10-14,UCSB intake,ambient,1,1,4,4,1
+BR14-3,2014-10-14,UCSB intake,ambient,1,3,4,4,1
+BR14-3,2014-10-14,UCSB intake,ambient,1,5,4,4,1
+BR14-3,2014-10-14,UCSB intake,ambient,1,7,4,4,1
+BR14-4,2014-10-16,UCSB intake,ambient,0,NA,NA,0,1
+BR14-4,2014-10-16,UCSB intake,ambient,1,1,4,4,1
+BR14-4,2014-10-16,UCSB intake,ambient,1,3,4,4,1
+BR14-4,2014-10-16,UCSB intake,ambient,1,5,4,4,1
+BR14-4,2014-10-16,UCSB intake,ambient,1,7,4,4,1
+BR14-5,2014-10-24,UCSB intake,ambient,0,NA,NA,0,1
+BR14-5,2014-10-24,UCSB intake,ambient,1,1,4,4,1
+BR14-5,2014-10-24,UCSB intake,ambient,1,3,4,4,1
+BR14-5,2014-10-24,UCSB intake,ambient,1,5,4,4,1
+BR14-5,2014-10-24,UCSB intake,ambient,1,7,4,4,1
+BR14-6,2014-10-30,UCSB intake,ambient,0,NA,NA,0,1
+BR14-6,2014-10-30,UCSB intake,ambient,1,1,4,4,1
+BR14-6,2014-10-30,UCSB intake,ambient,1,3,4,4,1
+BR14-6,2014-10-30,UCSB intake,ambient,1,5,4,4,1
+BR14-6,2014-10-30,UCSB intake,ambient,1,7,4,4,1
+BR14-7,2014-11-03,UCSB intake,ambient,0,NA,NA,0,1
+BR14-7,2014-11-03,UCSB intake,ambient,1,1,4,4,1
+BR14-7,2014-11-03,UCSB intake,ambient,1,3,4,4,1
+BR14-7,2014-11-03,UCSB intake,ambient,1,5,4,4,1
+BR14-7,2014-11-03,UCSB intake,ambient,1,7,4,4,1
+BR14-8,2014-11-15,UCSB intake,ambient,0,NA,NA,0,1
+BR14-8,2014-11-15,UCSB intake,ambient,1,1,4,4,1
+BR14-8,2014-11-15,UCSB intake,ambient,1,3,4,4,1
+BR14-8,2014-11-15,UCSB intake,ambient,1,5,4,4,1
+BR14-8,2014-11-15,UCSB intake,ambient,1,7,4,4,1
+BR15-1,2015-03-10,UCSB intake,ambient,0,NA,NA,0,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,1,4,1,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,1,4,3,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,1,4,4,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,1,4,5,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,1,4,6,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,3,4,1,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,3,4,3,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,3,4,4,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,3,4,5,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,3,4,6,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,5,4,1,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,5,4,3,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,5,4,4,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,5,4,5,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,5,4,6,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,7,4,1,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,7,4,3,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,7,4,4,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,7,4,5,1
+BR15-1,2015-03-10,UCSB intake,ambient,1,7,4,6,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,0,NA,NA,0,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,1,4,1,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,1,4,3,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,1,4,4,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,1,4,5,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,3,4,1,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,3,4,3,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,3,4,4,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,3,4,5,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,5,4,1,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,5,4,3,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,5,4,4,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,5,4,5,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,5,4,6,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,7,4,1,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,7,4,3,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,7,4,4,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,7,4,5,1
+BR15-1,2015-03-11,UCSB intake,diatom exudate,1,7,4,6,1
+BR15-10,2015-09-10,Goleta Pier,surface,0,NA,NA,0,1
+BR15-10,2015-09-10,Goleta Pier,surface,1,1,4,4,1
+BR15-10,2015-09-10,Goleta Pier,surface,1,5,4,4,1
+BR15-10,2015-09-10,Goleta Pier,surface,2,1_3,4,4,1
+BR15-10,2015-09-10,Goleta Pier,surface,2,5_7,4,4,1
+BR15-11,2015-09-23,Goleta Pier,surface,0,NA,NA,0,1
+BR15-11,2015-09-23,Goleta Pier,surface,1,1,4,4,1
+BR15-11,2015-09-23,Goleta Pier,surface,2,1_2,4,4,1
+BR15-11,2015-09-23,Goleta Pier,surface,3,1_2_3,4,4,1
+BR15-3,2015-03-19,UCSB intake,ambient,0,NA,NA,0,1
+BR15-3,2015-03-19,UCSB intake,ambient,1,1,4,4,1
+BR15-3,2015-03-19,UCSB intake,ambient,1,2,4,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,0,NA,NA,0,1
+BR15-4,2015-04-06,UCSB intake,ambient,1,1,4,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,1,1,20,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,1,3,4,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,1,3,20,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,1,5,4,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,1,5,20,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,1,7,4,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,1,7,20,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,2,1_2,4,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,2,1_2,20,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,2,3_4,4,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,2,3_4,20,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,2,5_6,4,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,2,5_6,20,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,2,7_8,4,4,1
+BR15-4,2015-04-06,UCSB intake,ambient,2,7_8,20,4,1
+BR15-5,2015-04-08,UCSB intake,ambient,0,NA,NA,0,1
+BR15-5,2015-04-08,UCSB intake,ambient,1,1,4,4,1
+BR15-5,2015-04-08,UCSB intake,ambient,1,5,4,4,1
+BR15-6,2015-04-14,Santa Barbara Channel,200 m,0,NA,NA,0,1
+BR15-6,2015-04-14,Santa Barbara Channel,200 m,1,1,4,4,1
+BR15-6,2015-04-14,Santa Barbara Channel,200 m,1,3,4,4,1
+BR15-6,2015-04-14,Santa Barbara Channel,200 m,1,5,4,4,1
+BR15-6,2015-04-14,Santa Barbara Channel,200 m,1,7,4,4,1
+BR15-6,2015-04-14,Santa Barbara Channel,75 m,0,NA,NA,0,1
+BR15-6,2015-04-14,Santa Barbara Channel,75 m,1,1,4,4,1
+BR15-6,2015-04-14,Santa Barbara Channel,75 m,1,3,4,4,1
+BR15-6,2015-04-14,Santa Barbara Channel,75 m,1,5,4,4,1
+BR15-6,2015-04-14,Santa Barbara Channel,75 m,1,7,4,4,1
+BR15-6,2015-04-14,Santa Barbara Channel,surface,0,NA,NA,0,1
+BR15-6,2015-04-14,Santa Barbara Channel,surface,1,1,4,4,1
+BR15-6,2015-04-14,Santa Barbara Channel,surface,1,3,4,4,1
+BR15-6,2015-04-14,Santa Barbara Channel,surface,1,5,4,4,1
+BR15-6,2015-04-14,Santa Barbara Channel,surface,1,7,4,4,1
+BR15-6,2015-04-14,UCSB intake,ambient,0,NA,NA,0,1
+BR15-6,2015-04-14,UCSB intake,ambient,1,1,4,4,1
+BR15-6,2015-04-14,UCSB intake,ambient,1,3,4,4,1
+BR15-6,2015-04-14,UCSB intake,ambient,1,5,4,4,1
+BR15-7,2015-07-17,Goleta Pier,surface,0,NA,NA,0,1
+BR15-7,2015-07-17,Goleta Pier,surface,1,1,4,4,1
+BR15-7,2015-07-17,Goleta Pier,surface,1,2,4,4,1
+BR15-7,2015-07-17,Goleta Pier,surface,1,3,4,4,1
+BR15-7,2015-07-17,Goleta Pier,surface,1,4,4,4,1
+BR15-7,2015-07-17,Goleta Pier,surface,1,5,4,4,1
+BR15-7,2015-07-17,Goleta Pier,surface,1,6,4,4,1
+BR15-7,2015-07-17,Goleta Pier,surface,1,7,4,4,1
+BR15-7,2015-07-17,Goleta Pier,surface,1,8,4,4,1
+BR15-7,2015-07-17,UCSB intake,ambient,0,NA,NA,0,1
+BR15-7,2015-07-17,UCSB intake,ambient,1,1,4,4,1
+BR15-7,2015-07-17,UCSB intake,ambient,1,2,4,4,1
+BR15-7,2015-07-17,UCSB intake,ambient,1,3,4,4,1
+BR15-7,2015-07-17,UCSB intake,ambient,1,4,4,4,1
+BR15-7,2015-07-17,UCSB intake,ambient,1,5,4,4,1
+BR15-7,2015-07-17,UCSB intake,ambient,1,6,4,4,1
+BR15-7,2015-07-17,UCSB intake,ambient,1,7,4,4,1
+BR15-7,2015-07-17,UCSB intake,ambient,1,8,4,4,1
+BR16-1,2016-01-21,Goleta Pier,surface,0,NA,NA,0,1
+BR16-1,2016-01-21,Goleta Pier,surface,1,1,4,7,1
+BR16-1,2016-01-22,Goleta Pier,surface,0,NA,NA,0,1
+BR16-1,2016-01-22,Goleta Pier,surface,1,1,4,7,1
+BR16-1,2016-01-23,Goleta Pier,surface,0,NA,NA,0,1
+BR16-1,2016-01-23,Goleta Pier,surface,1,1,4,7,1
+BR16-1,2016-01-24,Goleta Pier,surface,0,NA,NA,0,1
+BR16-1,2016-01-24,Goleta Pier,surface,1,1,4,7,1
+BR16-2,2016-10-11,Stearns Wharf,surface,0,NA,NA,0,1
+BR16-2,2016-10-11,Stearns Wharf,surface,1,5,4,7,1
+BR16-2,2016-10-11,Stearns Wharf,surface,2,5_6,4,7,1
+BR16-2,2016-10-11,Stearns Wharf,surface,3,5_6_8,4,7,1
+BR16-2,2016-10-11,Stearns Wharf,surface,4,5_6_8_9,4,7,1
+BR16-2,2016-10-11,Stearns Wharf,surface,5,5_6_8_10,4,7,1
+BR16-3,2016-10-11,Goleta Pier,diatom lysate,0,NA,NA,0,1
+BR16-3,2016-10-11,Goleta Pier,diatom lysate,1,5,4,7,1
+BR16-3,2016-10-11,Goleta Pier,diatom lysate,2,5_6,4,7,1
+BR16-3,2016-10-11,Goleta Pier,diatom lysate,3,5_6_8,4,7,1
+BR16-3,2016-10-11,Goleta Pier,diatom lysate,4,5_6_8_9,4,7,1
+BR16-3,2016-10-11,Goleta Pier,diatom lysate,5,5_6_8_9_10,4,7,1
+BR16-3,2016-10-11,Goleta Pier,surface,0,NA,NA,0,1
+BR16-3,2016-10-11,Goleta Pier,surface,1,5,4,7,1
+BR16-3,2016-10-11,Goleta Pier,surface,2,5_6,4,7,1
+BR16-3,2016-10-11,Goleta Pier,surface,3,5_6_8,4,7,1
+BR16-3,2016-10-11,Goleta Pier,surface,4,5_6_8_9,4,7,1
+BR16-3,2016-10-11,Goleta Pier,surface,5,5_6_8_9_10,4,7,1
+BR17-1,2017-05-12,UCSB intake,ambient,0,NA,NA,0,1
+BR17-1,2017-05-12,UCSB intake,ambient,1,5,4,7,1
+BR17-1,2017-05-12,UCSB intake,ambient,2,5_6,4,7,1
+BR17-1,2017-05-12,UCSB intake,ambient,3,5_6_8,4,7,1
+BR17-2,2017-05-17,Goleta Pier,surface,0,NA,NA,0,1
+BR17-2,2017-05-17,Goleta Pier,surface,1,5,4,7,1
+BR17-2,2017-05-17,Goleta Pier,surface,2,5_6,4,7,1
+BR17-2,2017-05-17,Goleta Pier,surface,3,5_6_8,4,7,1
+BR17-2,2017-05-17,Goleta Pier,surface,4,5_6_8_9,4,7,1
+BR17-2,2017-05-17,Goleta Pier,surface,5,5_6_8_9_10,4,7,1

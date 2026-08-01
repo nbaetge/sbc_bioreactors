@@ -1,0 +1,10 @@
+comparison,group,n
+Bottom versus top beads,Bottom,5
+Bottom versus top beads,Top,5
+Sample material,Batch culture water,6
+Sample material,Effluent,1
+Sample material,Beads,10
+Batch treatment and time,Ambient — 0,1
+Batch treatment and time,Diatom lysate — 0,1
+Batch treatment and time,Ambient — 96,2
+Batch treatment and time,Diatom lysate — 96,2

@@ -1,0 +1,8 @@
+sample_material,incubation_stage,treatment,n_samples
+Batch culture water,Batch T0,Ambient,1
+Batch culture water,Batch T0,Diatom lysate,1
+Batch culture water,Batch 96 h,Ambient,2
+Batch culture water,Batch 96 h,Diatom lysate,2
+Effluent,Bioreactor effluent,Diatom lysate,1
+Beads,Beads — bottom,NA,5
+Beads,Beads — top,NA,5

@@ -1,0 +1,7 @@
+sample_id,Axis1,Axis2,treatment,hours_elapsed,bottle
+N-Control-T0_S121_F_filt.fastq,-0.47833543399127554,0.30905580265975785,Ambient,0,AB
+N-Amend-T0_S124_F_filt.fastq,-0.49769042494106025,0.2935691451556475,Diatom lysate,0,CD
+N-Control-A-T4_S122_F_filt.fastq,-0.5348747485661827,0.13918660970464575,Ambient,96,A
+N-Control-B-T4_S123_F_filt.fastq,-0.5309682710779015,0.12518109045814982,Ambient,96,B
+N-Amend-C-T4_S125_F_filt.fastq,-0.35375490692759026,-0.5429643963558296,Diatom lysate,96,C
+N-Amend-D-T4_S126_F_filt.fastq,-0.3314217866769161,-0.5583011815375207,Diatom lysate,96,D

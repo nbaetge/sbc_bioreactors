@@ -1,0 +1,18 @@
+sample_id,Shannon,Simpson,retained_asvs,sample_material,incubation_stage,treatment,bead_position,bioreactor,bottle,hours_elapsed,library_size,sample_group
+N-Control-T0_S121_F_filt.fastq,4.3531384964494295,0.9781082497224793,186,Batch culture water,Batch T0,Ambient,NA,,AB,0,53100,Batch T0
+N-Amend-T0_S124_F_filt.fastq,4.211905081679501,0.9701809581945693,195,Batch culture water,Batch T0,Diatom lysate,NA,,CD,0,69273,Batch T0
+N-Control-A-T4_S122_F_filt.fastq,4.3932296120315275,0.9800707364193636,197,Batch culture water,Batch 96 h,Ambient,NA,,A,96,51006,Batch 96 h
+N-Control-B-T4_S123_F_filt.fastq,4.341673791794578,0.9780339950233433,187,Batch culture water,Batch 96 h,Ambient,NA,,B,96,60051,Batch 96 h
+N-Amend-C-T4_S125_F_filt.fastq,3.35956662714008,0.9396393780779329,116,Batch culture water,Batch 96 h,Diatom lysate,NA,,C,96,56882,Batch 96 h
+N-Amend-D-T4_S126_F_filt.fastq,3.201365941762983,0.9233167955581707,120,Batch culture water,Batch 96 h,Diatom lysate,NA,,D,96,58819,Batch 96 h
+N-BR5-B_S99_F_filt.fastq,6.12269147571033,0.9947442704459768,910,Beads,Beads — bottom,NA,Bottom,5,,0,54843,Beads — bottom
+N-BR6-B_S101_F_filt.fastq,5.003592138811449,0.976311472448489,532,Beads,Beads — bottom,NA,Bottom,6,,0,52166,Beads — bottom
+N-BR8-B_S103_F_filt.fastq,5.681429045808967,0.9930131017871711,575,Beads,Beads — bottom,NA,Bottom,8,,0,30885,Beads — bottom
+N-BR9-B_S105_F_filt.fastq,6.010795953685438,0.9942298275708716,835,Beads,Beads — bottom,NA,Bottom,9,,0,50555,Beads — bottom
+N-BR10-B_S107_F_filt.fastq,5.981297723596034,0.9931321716384485,857,Beads,Beads — bottom,NA,Bottom,10,,0,45750,Beads — bottom
+N-BR5-T_S100_F_filt.fastq,6.108920680776295,0.995154883497056,977,Beads,Beads — top,NA,Top,5,,0,92596,Beads — top
+N-BR6-T_S102_F_filt.fastq,6.030034984520539,0.9949272556109695,802,Beads,Beads — top,NA,Top,6,,0,51048,Beads — top
+N-BR8-T_S104_F_filt.fastq,5.95900148684041,0.99546850453492,719,Beads,Beads — top,NA,Top,8,,0,48129,Beads — top
+N-BR9-T_S106_F_filt.fastq,5.336268347761405,0.9930272481182842,313,Beads,Beads — top,NA,Top,9,,0,22411,Beads — top
+N-BR10-T_S108_F_filt.fastq,5.883017979980586,0.993816008395553,709,Beads,Beads — top,NA,Top,10,,0,93257,Beads — top
+N-Amend-BR5-10-FT_S119_F_filt.fastq,5.5816459261753515,0.9835144155293533,910,Effluent,Bioreactor effluent,Diatom lysate,NA,5_6_8_9_10,,4,100655,Bioreactor effluent

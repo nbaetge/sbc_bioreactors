@@ -1,0 +1,2 @@
+comparison,method,df,sum_of_squares,r_squared,statistic_F,p_value
+Bottom versus top beads,Paired PERMANOVA,1,0.45510829356347626,0.19037170009230306,1.8810775276902447,0.125

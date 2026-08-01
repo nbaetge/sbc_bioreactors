@@ -1,0 +1,44 @@
+Phylum,Family,direction,n_significant_asvs,median_log2_fold_change,minimum_adjusted_p
+Unclassified phylum,Unclassified family,Enriched at bottom,38,-8.708337751595021,0.0059415554246876594
+Planctomycetota,Pirellulaceae,Enriched at bottom,8,-8.098131781644042,0.008522300349764667
+Pseudomonadota,Unclassified family,Enriched at bottom,6,-8.409131544194366,0.0045486157061582705
+Acidobacteriota,Incertae sedis (Acidobacteriota),Enriched at bottom,3,-7.953754629982148,0.009205310921505753
+Bacteroidota,Saprospiraceae,Enriched at bottom,3,-9.107449355350864,0.009205310921505753
+Pseudomonadota,Sphingomonadaceae_2,Enriched at bottom,3,-8.288429023872428,0.009205310921505753
+Bacteroidota,Cyclobacteriaceae,Enriched at bottom,3,-8.403129031474199,0.012014547052976714
+Thermoproteota,Nitrosopumilaceae_2,Enriched at bottom,2,-9.843630425052748,0.0045486157061582705
+Dadabacteria,Incertae sedis (Dadabacteria),Enriched at bottom,2,-8.810760378522382,0.008522300349764667
+Planctomycetota,Pirellulaceae,Enriched at top,2,8.41151544343101,0.009285493696539188
+Planctomycetota,Unclassified family,Enriched at bottom,2,-9.53399572141421,0.009285493696539188
+Acidobacteriota,Thermoanaerobaculaceae,Enriched at bottom,2,-8.30645778032369,0.009802669435519907
+Planctomycetota,Incertae sedis (Planctomycetota),Enriched at bottom,2,-8.762172290656094,0.012014547052976714
+Pseudomonadota,Incertae sedis (Pseudomonadota),Enriched at bottom,2,-7.93764986075818,0.01596534227960185
+Chloroflexota,A4b_2,Enriched at bottom,1,-11.902972743548355,0.0045486157061582705
+Pseudomonadota,Kiloniellaceae_2,Enriched at bottom,1,-11.801426196562822,0.0045486157061582705
+Elusimicrobiota,Incertae sedis (Elusimicrobiota),Enriched at bottom,1,-11.253936133045654,0.0059415554246876594
+Nitrospirota,Nitrospiraceae,Enriched at bottom,1,-11.059296317957664,0.0059415554246876594
+Planctomycetota,Phycisphaeraceae,Enriched at bottom,1,-11.14551060106361,0.0059415554246876594
+Pseudomonadota,Unclassified family,Enriched at top,1,11.526805106638276,0.007217561093193881
+Planctomycetota,Rubinisphaeraceae,Enriched at bottom,1,-11.448627124254305,0.0076821721636004285
+Verrucomicrobiota,DEV007_2,Enriched at bottom,1,-9.969040610442088,0.008522300349764667
+Chloroflexota,Anaerolineaceae_2,Enriched at bottom,1,-10.046989253049057,0.009205310921505753
+Pseudomonadota,Nitrosococcaceae_2,Enriched at bottom,1,-10.60383441889414,0.009205310921505753
+Rhodothermota,Rhodothermaceae_2,Enriched at bottom,1,-10.656786717086076,0.009205310921505753
+Myxococcota,Unclassified family,Enriched at bottom,1,-9.90846361041759,0.009285493696539188
+Bacteroidota,Flavobacteriaceae,Enriched at bottom,1,-8.458604227540038,0.009709352576425023
+Rhodothermota,Rhodothermaceae_2,Enriched at top,1,10.363399784442118,0.009709352576425023
+Verrucomicrobiota,Unclassified family,Enriched at bottom,1,-8.400898157247395,0.009709352576425023
+Pseudomonadota,Clade I_2,Enriched at bottom,1,-10.334497936851113,0.009802669435519907
+Gemmatimonadota,Incertae sedis (Gemmatimonadota),Enriched at bottom,1,-9.903323193851747,0.012014547052976714
+Pseudomonadota,Pseudohongiellaceae_2,Enriched at top,1,9.762680198715344,0.012822297617704597
+Planctomycetota,Unclassified family,Enriched at top,1,9.112962161497936,0.012984215778797324
+Bacteroidota,Unclassified family,Enriched at bottom,1,-7.815415308162997,0.01405398828702745
+Pseudomonadota,Clade II_2,Enriched at bottom,1,-8.92800514610555,0.014709296867540904
+Cyanobacteriota,Cyanobiaceae_2,Enriched at bottom,1,-7.662888295540601,0.01596534227960185
+Unclassified phylum,Unclassified family,Enriched at top,1,7.650852340825763,0.02417309932256872
+Pseudomonadota,Hyphomicrobiaceae_2,Enriched at bottom,1,-6.749596433810353,0.025200474249516425
+Verrucomicrobiota,DEV007_2,Enriched at top,1,8.980687064660863,0.025200474249516425
+NB1-j,Incertae sedis (NB1-j),Enriched at bottom,1,-7.825164243390287,0.026842972020530452
+Pseudomonadota,Vibrionaceae_2,Enriched at top,1,7.777895612923683,0.026842972020530452
+Planctomycetota,Gimesiaceae,Enriched at bottom,1,-7.794840193320319,0.02904101786807253
+Pseudomonadota,Paracoccaceae,Enriched at bottom,1,-7.521598486523295,0.04958199389156245

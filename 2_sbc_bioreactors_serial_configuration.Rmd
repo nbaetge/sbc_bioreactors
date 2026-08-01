@@ -5,10 +5,9 @@ date: "Last compiled on `r format(Sys.time(), '%d %B, %Y')`"
 output: github_document
 ---
 
-
 ```{r}
 # =========================
-# DOC removal in series
+# Cumulative DOC removal in serial bioreactors
 # =========================
 
 # ---- packages ----
@@ -16,247 +15,426 @@ library(tidyverse)
 library(readxl)
 library(janitor)
 library(glue)
-library(scales)
 library(forcats)
 
-# ---- params ----
+# ---- parameters ----
 data_path <- "~/github/sbc_bioreactors/data/bioreactor_data.xlsx"
-target_exps <- c("BR15-10","BR15-11","BR16-2","BR16-3","BR17-2")
-analytical_threshold <- 1.5   # µmol C L^-1 
-fig_out <- "series_DOC_removal_with_plateau_sig.png"
-csv_out <- "series_DOC_removal_summary.csv"  # set to NULL to skip write
+target_exps <- c(
+  "BR15-4", "BR15-10", "BR15-11", "BR16-2",
+  "BR16-3", "BR17-1", "BR17-2"
+)
 
-# ---- load & clean ----
+# In this dataset, flow rate is stored in mL s^-1.
+# Thus, 0.066667 mL s^-1 = 4 mL min^-1 and 0.333 mL s^-1 = 20 mL min^-1.
+# Retain only the 4 mL min^-1 treatment for BR15-4.
+flow_4_ml_min <- 4 / 60
+flow_tolerance <- 0.001
+
+analytical_threshold <- 1.5  # µmol C L^-1
+fig_out <- "figures/Figure_4_serial_DOC_removal.pdf"
+csv_out <- "results/Figure_4_serial_DOC_removal_summary.csv"
+
+# ---- load and clean ----
 df <- read_excel(data_path, sheet = 1) |>
-  clean_names()
-
-df_sub <- df |>
-  filter(exp %in% target_exps) |>
+  clean_names() |>
   mutate(
     bioreactor_n  = as.numeric(bioreactor_n),
     hours_elapsed = as.numeric(hours_elapsed),
-    water         = fct_explicit_na(water, na_level = "unspecified"),
-    # Split BR16-3 into panels by water; others keep their exp as panel label
-    exp_panel     = if_else(exp == "BR16-3", paste(exp, trt, sep = " – "), exp)
+    flowrate      = as.numeric(flowrate),
+    trt            = fct_explicit_na(as.factor(trt), na_level = "unspecified"),
+    beads          = fct_explicit_na(as.factor(beads), na_level = "unspecified")
   )
 
-# ---- influent per panel (earliest position-0 sample) ----
+# Keep serial-assay observations only. For BR15-4, exclude the 20 mL min^-1
+# treatment so that all panels represent approximately 4 mL min^-1 assays.
+df_sub <- df |>
+  filter(exp %in% target_exps) |>
+  filter(
+    exp != "BR15-4" |
+      is.na(flowrate) |
+      abs(flowrate - flow_4_ml_min) <= flow_tolerance
+  ) |>
+  filter(!is.na(bioreactor_n)) |>
+  mutate(
+    treatment_label = case_when(
+      trt == "DiatomLysate" ~ "diatom lysate",
+      trt == "0m"           ~ "ambient",
+      TRUE                  ~ as.character(trt)
+    ),
+    bead_label = case_when(
+      beads == "homogenous" ~ "Homogeneous (1 mm)",
+      beads == "mixed"      ~ "Mixed (1 + 4 mm)",
+      TRUE                  ~ as.character(beads)
+    )
+  )
+
+# ---- define independent serial configurations ----
+# The bioreactor field records the columns in each configuration (e.g., 1_2_3).
+# The first column number identifies the independent serial sequence.
+df_sub <- df_sub |>
+  mutate(
+    first_column = if_else(
+      bioreactor_n > 0 & !is.na(bioreactor),
+      stringr::str_extract(as.character(bioreactor), "^[0-9]+"),
+      NA_character_
+    ),
+    series_id = case_when(
+      bioreactor_n == 0 ~ "influent",
+      !is.na(first_column) ~ paste0("series_", first_column),
+      TRUE ~ as.character(bioreactor)
+    )
+  )
+
+# ---- panel labels ----
+# Combine bead packings within the same experiment panel and distinguish them
+# by color. BR16-3 remains separated by treatment.
+df_sub <- df_sub |>
+  mutate(
+    panel = case_when(
+      exp == "BR16-3" ~ paste(exp, treatment_label, sep = " – "),
+      TRUE ~ exp
+    )
+  )
+
+# Influent samples do not carry bead-packing labels, so duplicate the appropriate
+# influent into every panel belonging to the same experiment/treatment.
+panel_key <- df_sub |>
+  filter(bioreactor_n > 0) |>
+  distinct(exp, treatment_label, panel)
+
 influent <- df_sub |>
   filter(bioreactor_n == 0) |>
-  group_by(exp_panel) |>
-  slice_min(order_by = hours_elapsed, n = 1, with_ties = FALSE) |>
-  summarise(
-    doc_in = mean(mean_doc, na.rm = TRUE),
-    se_in  = mean(se_doc,  na.rm = TRUE),
-    .groups = "drop"
-  )
+  group_by(exp, treatment_label) |>
+  slice_min(hours_elapsed, n = 1, with_ties = FALSE) |>
+  summarise(doc_in = mean(mean_doc, na.rm = TRUE), .groups = "drop") |>
+  inner_join(panel_key, by = c("exp", "treatment_label")) |>
+  select(panel, doc_in)
 
-# ---- effluent per panel × position (average if multiple entries exist) ----
-effluent <- df_sub |>
-  filter(bioreactor_n > 0) |>
-  group_by(exp_panel, bioreactor_n) |>
-  summarise(
-    mean_doc_eff = mean(mean_doc, na.rm = TRUE),
-    se_eff       = mean(se_doc,  na.rm = TRUE),
-    n_obs        = dplyr::n(),
-    .groups = "drop"
-  )
-
-# ---- ΔDOC, % removed, and propagated analytical SE ----
-delta <- effluent |>
-  left_join(influent, by = "exp_panel") |>
-  mutate(
-    delta_doc   = doc_in - mean_doc_eff,
-    se_delta    = sqrt(se_in^2 + se_eff^2),          # propagated analytical SE
-    pct_removed = 100 * delta_doc / doc_in
+# ---- cumulative removal for each independent serial configuration ----
+series_data <- df_sub |>
+  filter(bioreactor_n > 0, !is.na(mean_doc)) |>
+  select(
+    exp, treatment_label, panel, bead_label, series_id,
+    bioreactor, bioreactor_n, mean_doc
   ) |>
-  arrange(exp_panel, bioreactor_n)
-
-# ---- marginal gain & plateau detection ----
-delta <- delta |>
-  group_by(exp_panel) |>
+  left_join(influent, by = "panel") |>
   mutate(
-    delta_prev     = dplyr::lag(delta_doc),
-    se_prev        = dplyr::lag(se_delta),
-    marginal_gain  = delta_doc - delta_prev,
-    se_marginal    = sqrt(se_delta^2 + se_prev^2),
-    z_marginal     = marginal_gain / se_marginal,
-    p_marginal     = 2 * (1 - pnorm(abs(z_marginal))),
-    # plateau step: the *step into* position k adds < threshold and is not significant
-    plateau_step   = if_else(
-      !is.na(marginal_gain) &
-        abs(marginal_gain) < analytical_threshold &
-        (is.na(p_marginal) | p_marginal >= 0.05),
-      TRUE, FALSE
+    cumulative_removal = doc_in - mean_doc,
+    pct_removed = 100 * cumulative_removal / doc_in
+  ) |>
+  arrange(panel, series_id, bioreactor_n) |>
+  group_by(panel, bead_label, series_id) |>
+  mutate(
+    marginal_removal = cumulative_removal - lag(cumulative_removal),
+    marginal_class = case_when(
+      is.na(marginal_removal) ~ "first column",
+      marginal_removal >= analytical_threshold ~ "resolvable additional removal",
+      marginal_removal <= -analytical_threshold ~ "decline in cumulative removal",
+      TRUE ~ "change below analytical resolution"
     )
   ) |>
   ungroup()
 
-plateau_by_panel <- delta |>
-  filter(plateau_step) |>
-  group_by(exp_panel) |>
-  slice_min(bioreactor_n, with_ties = FALSE) |>
-  ungroup() |>
-  select(exp_panel, plateau_at_pos = bioreactor_n)
+# ---- panel summaries ----
+# Where more than one independent serial configuration is available at a given
+# position (BR15-4), report arithmetic mean ± SD among configurations.
+# Single-configuration panels are shown without an error bar.
+summary_data <- series_data |>
+  group_by(panel, bead_label, bioreactor_n) |>
+  summarise(
+    mean_removal = mean(cumulative_removal, na.rm = TRUE),
+    sd_removal = if_else(n() > 1, sd(cumulative_removal, na.rm = TRUE), NA_real_),
+    n_series = n_distinct(series_id),
+    mean_pct_removed = mean(pct_removed, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  arrange(panel, bioreactor_n) |>
+  group_by(panel, bead_label) |>
+  mutate(
+    marginal_mean = mean_removal - lag(mean_removal),
+    marginal_class = case_when(
+      is.na(marginal_mean) ~ "first column",
+      marginal_mean >= analytical_threshold ~ "resolvable additional removal",
+      marginal_mean <= -analytical_threshold ~ "decline in cumulative removal",
+      TRUE ~ "change below analytical resolution"
+    )
+  ) |>
+  ungroup()
 
-# ---- significance labels for step k-1 -> k ----
-delta <- delta |>
-  mutate(sig_label = case_when(
-    !is.na(p_marginal) & p_marginal < 0.001 ~ "***",
-    !is.na(p_marginal) & p_marginal < 0.01  ~ "**",
-    !is.na(p_marginal) & p_marginal < 0.05  ~ "*",
-    TRUE ~ ""
-  ))
-
-# ---- prep for figure ----
-fig_data <- delta |>
-  left_join(plateau_by_panel, by = "exp_panel")
-
-# Facet order 
-facet_levels <- fig_data |>
-  distinct(exp_panel) |>
-  arrange(exp_panel) |>
-  pull(exp_panel)
-
-fig_data <- fig_data |>
-  mutate(exp_panel = factor(exp_panel, levels = facet_levels))
-
-# ---- figure ----
-# --- padding for % labels & stars ---
-pads <- fig_data %>%
-  dplyr::group_by(exp_panel) %>%
-  dplyr::summarise(
-    rng      = diff(range(delta_doc, na.rm = TRUE)),
-    pad_pct  = pmax(0.04 * rng, 0.6),
-    pad_star = pmax(0.10 * rng, 1.2),
-    .groups  = "drop"
-  )
-
-# Build plotting df; precompute the NEGATIVE values & label positions
-fig_plot <- fig_data %>%
-  dplyr::left_join(pads, by = "exp_panel") %>%
-  dplyr::mutate(
-    delta_neg = -delta_doc,                                  # <- flip sign for plotting
-    ymin_neg  = -(delta_doc + se_delta),                     # <- errorbar lower
-    ymax_neg  = -(delta_doc - se_delta),                     # <- errorbar upper
-    y_pct     = -(delta_doc) - se_delta - pad_pct,           # <- % label just below errorbar
-    y_star    = -(delta_doc) - se_delta - pad_star           # <- stars a bit lower
-  )
-
-# bead-linked hues by experiment 
-bead_map <- tibble::tibble(
-  exp        = c("BR15-10", "BR15-11", "BR16-2", "BR16-3", "BR17-2"),
-  bead_class = c("both",    "homogenous", "mixed", "mixed", "mixed")
+# ---- facet order ----
+panel_order <- c(
+  "BR15-4",
+  "BR15-10",
+  "BR15-11",
+  "BR16-2",
+  "BR16-3 – ambient",
+  "BR16-3 – diatom lysate",
+  "BR17-1",
+  "BR17-2"
 )
 
-fig_plot <- fig_plot %>%
-  dplyr::mutate(exp_base = sub(" –.*$", "", exp_panel)) %>%
-  dplyr::left_join(bead_map, by = c("exp_base" = "exp")) %>%
-  dplyr::mutate(bead_class = factor(bead_class, levels = c("homogenous","mixed","both")))
+series_data <- series_data |>
+  mutate(
+    panel = factor(panel, levels = panel_order),
+    bead_label = factor(
+      bead_label,
+      levels = c("Homogeneous (1 mm)", "Mixed (1 + 4 mm)")
+    )
+  )
+summary_data <- summary_data |>
+  mutate(
+    panel = factor(panel, levels = panel_order),
+    bead_label = factor(
+      bead_label,
+      levels = c("Homogeneous (1 mm)", "Mixed (1 + 4 mm)")
+    )
+  )
 
-# colors & labeller 
-bead_cols <- c(homogenous = "#009E73", mixed = "#E69F00", both = "grey40")
 panel_labeller <- labeller(
-  exp_panel = function(v){
-    v <- sub("^BR", "", v)
-    v <- sub("DiatomLysate", "diatom lysate", v, fixed = TRUE)
-    v <- sub("0m", "0 m", v, fixed = TRUE)
-    v
+  panel = function(x) {
+    x |>
+      stringr::str_remove("^BR") |>
+      stringr::str_replace(" – ambient$", "\nambient") |>
+      stringr::str_replace(" – diatom lysate$", "\ndiatom lysate")
   }
 )
 
-plateau_data <- fig_plot %>% dplyr::distinct(exp_panel, bead_class, plateau_at_pos)
+# A zero-column reference is useful because cumulative removal is exactly zero
+# before water enters a bioreactor. These origin points are definitional, not
+# measured observations, and are plotted in grey without entering summaries.
+show_origin <- TRUE
+origin_data <- summary_data |>
+  distinct(panel) |>
+  mutate(
+    bioreactor_n = 0,
+    mean_removal = 0
+  )
 
-# --- PLOT: −ΔDOC on the y-axis (0 at top, removal is negative) ---
-p <- ggplot(fig_plot, aes(x = bioreactor_n, y = delta_neg)) +
-  geom_hline(yintercept = 0, linewidth = 0.4, color = "grey80") +
-  geom_errorbar(aes(ymin = ymin_neg, ymax = ymax_neg),
-                width = 0.15, linewidth = 0.5, color = "grey60") +
-  geom_line(aes(color = bead_class), linewidth = 0.9) +
-  geom_point(aes(fill = bead_class), shape = 21, color = "black",
-             stroke = 0.4, size = 2.9) +
-  geom_text(aes(y = y_pct, label = scales::percent(pct_removed/100, accuracy = 1)),
-            size = 3) +
-  geom_text(data = subset(fig_plot, bioreactor_n > 1 & sig_label != ""),
-            aes(y = y_star, label = sig_label), size = 4) +
-  geom_vline(data = plateau_data,
-             aes(xintercept = plateau_at_pos, color = bead_class),
-             linetype = "dashed", linewidth = 0.7, na.rm = TRUE, show.legend = FALSE) +
-  scale_x_continuous(breaks = scales::pretty_breaks()) +
-  # extra space *downward* (more negative) for labels
-  scale_y_continuous(expand = expansion(mult = c(0.05, 0.28))) +
-  scale_color_manual(values = bead_cols, name = "Bead configuration",
-                     labels = c(homogenous = "Homogenous (1 mm)",
-                                mixed      = "Mixed (1 + 4 mm)",
-                                both       = "Both")) +
-  scale_fill_manual(values = bead_cols, name = "Bead configuration",
-                    labels = c(homogenous = "Homogenous (1 mm)",
-                               mixed      = "Mixed (1 + 4 mm)",
-                               both       = "Both")) +
-  guides(fill = "none") +
-  labs(
-    x = "Bioreactor position in series",
-    y = expression("\u2212"*Delta*"DOC ("*mu*"mol C L"^{-1}*")"),   # shows '−ΔDOC'
-    caption = "16-3 panels split by water source"
+# ---- figure ----
+p <- ggplot() +
+  geom_hline(yintercept = 0, linewidth = 0.4, color = "grey65") +
+  # Optional definitional origin: zero cumulative removal at zero columns.
+  {if (show_origin) geom_point(
+    data = origin_data,
+    aes(x = bioreactor_n, y = mean_removal),
+    shape = 23,
+    size = 2.0,
+    stroke = 0.55,
+    fill = "white",
+    color = "grey45",
+    inherit.aes = FALSE
+  )} +
+  # Independent serial configurations.
+  geom_line(
+    data = series_data,
+    aes(
+      x = bioreactor_n,
+      y = cumulative_removal,
+      group = interaction(panel, bead_label, series_id),
+      color = bead_label
+    ),
+    linewidth = 0.45,
+    alpha = 0.30,
+    show.legend = FALSE
   ) +
-  facet_wrap(~ exp_panel, scales = "free_y", labeller = panel_labeller) +
+  geom_point(
+    data = series_data,
+    aes(
+      x = bioreactor_n,
+      y = cumulative_removal,
+      color = bead_label
+    ),
+    size = 1.7,
+    alpha = 0.40,
+    show.legend = FALSE
+  ) +
+  # Arithmetic mean ± SD among independent serial configurations.
+  geom_errorbar(
+    data = summary_data |> filter(!is.na(sd_removal)),
+    aes(
+      x = bioreactor_n,
+      ymin = mean_removal - sd_removal,
+      ymax = mean_removal + sd_removal,
+      color = bead_label
+    ),
+    width = 0.12,
+    linewidth = 0.55,
+    position = position_dodge(width = 0.08),
+    show.legend = FALSE
+  ) +
+  geom_line(
+    data = summary_data,
+    aes(
+      x = bioreactor_n,
+      y = mean_removal,
+      group = bead_label,
+      color = bead_label
+    ),
+    linewidth = 0.90
+  ) +
+  # First-column symbols are filled by bead configuration; subsequent
+  # marginal-change symbols remain open to emphasize the change category.
+  geom_point(
+    data = summary_data |> filter(marginal_class == "first column"),
+    aes(
+      x = bioreactor_n,
+      y = mean_removal,
+      shape = marginal_class,
+      color = bead_label,
+      fill = bead_label
+    ),
+    size = 2.9,
+    stroke = 0.75
+  ) +
+  geom_point(
+    data = summary_data |> filter(marginal_class != "first column"),
+    aes(
+      x = bioreactor_n,
+      y = mean_removal,
+      shape = marginal_class,
+      color = bead_label
+    ),
+    size = 2.9,
+    stroke = 0.75,
+    fill = "white"
+  ) +
+  scale_color_manual(
+    values = c(
+      "Homogeneous (1 mm)" = "#009E73",
+      "Mixed (1 + 4 mm)" = "#E69F00"
+    ),
+    name = "Bead configuration"
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Homogeneous (1 mm)" = "#009E73",
+      "Mixed (1 + 4 mm)" = "#E69F00"
+    ),
+    guide = "none"
+  ) +
+  scale_shape_manual(
+    values = c(
+      "first column" = 22,
+      "resolvable additional removal" = 24,
+      "change below analytical resolution" = 21,
+      "decline in cumulative removal" = 25
+    ),
+    breaks = c(
+      "first column",
+      "resolvable additional removal",
+      "change below analytical resolution",
+      "decline in cumulative removal"
+    ),
+    labels = c(
+      "First column",
+      expression(paste(">=1.5 ", mu, "mol C ", L^{-1}, " additional removal")),
+      expression(paste("<1.5 ", mu, "mol C ", L^{-1}, " change")),
+      "Decline in cumulative removal"
+    ),
+    name = "Marginal change"
+  ) +
+  scale_x_continuous(
+    breaks = 0:5,
+    limits = c(-0.15, 5.2)
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.08, 0.12))) +
+  labs(
+    x = "Number of bioreactor columns in series",
+    y = expression("Cumulative DOC removal ("*mu*"mol C L"^{-1}*")"),
+    # caption = paste0(
+    #   "Colors distinguish bead configurations. Small points and thin lines show independent serial configurations; ",
+    #   "large points show arithmetic means. Error bars show SD among independent serial configurations where more than one was available. ",
+    #   if (show_origin) "Grey diamonds at zero columns are definitional origins (zero cumulative removal), not measured samples. " else "",
+    #   "Symbol shapes classify the marginal change relative to the preceding measured column using a 1.5 µmol C L⁻¹ analytical threshold. ",
+    #   "BR15-4 includes only the 4 mL min⁻¹ treatment."
+    # )
+  ) +
+  guides(
+    color = guide_legend(
+      order = 1,
+      override.aes = list(shape = 16, size = 2.6, linewidth = 0.8)
+    ),
+    shape = guide_legend(
+      order = 2,
+      override.aes = list(color = "black", fill = "white", size = 2.6)
+    )
+  ) +
+  facet_wrap(~ panel, scales = "free_y", ncol = 3, labeller = panel_labeller) +
   theme_bw(base_size = 11) +
-  coord_cartesian(clip = "off") +
   theme(
-    legend.position  = "top",
-    legend.title     = element_text(face = "bold"),
+    legend.position = "top",
+    legend.box = "vertical",
+    legend.title = element_text(face = "bold", size = 10),
+    legend.text = element_text(size = 9),
+    legend.key.width = unit(1.0, "lines"),
+    legend.spacing.y = unit(0.05, "cm"),
     panel.grid.minor = element_blank(),
     strip.background = element_rect(fill = "white"),
-    strip.text       = element_text(face = "bold"),
-    plot.margin      = margin(6, 12, 6, 6)
+    strip.text = element_text(face = "bold"),
+    plot.caption = element_text(hjust = 0),
+    plot.margin = margin(6, 10, 6, 6)
   )
 
 p
 
+ggsave(
+  filename = fig_out,
+  plot = p,
+  width = 10.5,
+  height = 7.8,
+  dpi = 600
+)
 
-# ---- tidy summary table (per panel × position) ----
-table_ms <- delta |>
+
+# ---- tidy output table ----
+table_ms <- series_data |>
   transmute(
-    panel            = exp_panel,
-    position         = bioreactor_n,
-    delta_doc_uM     = round(delta_doc, 2),
-    se_delta_uM      = round(se_delta, 2),
-    pct_removed      = round(pct_removed, 1),
-    marginal_gain_uM = round(marginal_gain, 2),
-    p_marginal       = signif(p_marginal, 2),
-    sig_step         = case_when(
-      !is.na(p_marginal) & p_marginal < 0.001 ~ "***",
-      !is.na(p_marginal) & p_marginal < 0.01  ~ "**",
-      !is.na(p_marginal) & p_marginal < 0.05  ~ "*",
-      TRUE ~ ""
-    ),
-    plateau_step     = plateau_step
+    experiment = exp,
+    treatment = treatment_label,
+    panel,
+    bead_packing = bead_label,
+    series_id,
+    configuration = bioreactor,
+    position = bioreactor_n,
+    influent_doc_uM = round(doc_in, 2),
+    effluent_doc_uM = round(mean_doc, 2),
+    cumulative_removal_uM = round(cumulative_removal, 2),
+    percent_removed = round(pct_removed, 1),
+    marginal_removal_uM = round(marginal_removal, 2),
+    marginal_class
   ) |>
-  arrange(panel, position)
+  arrange(panel, series_id, position)
 
-
-# ---- quick per-panel summary ----
-summary_text <- delta |>
-  group_by(exp_panel) |>
+# ---- concise panel summary ----
+summary_text <- summary_data |>
+  group_by(panel, bead_label) |>
   summarise(
-    max_pos     = max(bioreactor_n, na.rm = TRUE),
-    max_delta_uM = round(max(delta_doc, na.rm = TRUE), 1),
-    plateau_at  = plateau_by_panel$plateau_at_pos[match(exp_panel, plateau_by_panel$exp_panel)],
+    max_position = max(bioreactor_n, na.rm = TRUE),
+    maximum_removal_uM = round(max(mean_removal, na.rm = TRUE), 1),
+    position_of_maximum = bioreactor_n[which.max(mean_removal)],
+    additional_removal_beyond_column_2 = any(
+      bioreactor_n > 2 & marginal_mean >= analytical_threshold,
+      na.rm = TRUE
+    ),
     .groups = "drop"
   ) |>
   mutate(
     note = if_else(
-      is.na(plateau_at),
-      glue("No plateau detected up to position {max_pos} (max ΔDOC ≈ {max_delta_uM} µM)."),
-      glue("Plateau detected at step into position {plateau_at}.")
+      additional_removal_beyond_column_2,
+      glue(
+        "Resolvable additional removal occurred beyond column 2; maximum mean removal was {maximum_removal_uM} µM at position {position_of_maximum}."
+      ),
+      glue(
+        "No mean increment beyond column 2 exceeded 1.5 µM; maximum mean removal was {maximum_removal_uM} µM at position {position_of_maximum}."
+      )
     )
   )
 
-# print outputs in console
+if (!is.null(csv_out)) {
+  write_csv(table_ms, csv_out)
+}
+
 print(table_ms)
 print(summary_text)
 print(p)
 ```
-
-```
-

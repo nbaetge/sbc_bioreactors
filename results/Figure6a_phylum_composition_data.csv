@@ -1,0 +1,137 @@
+sample_id,sample_group,sample_material,bead_position,treatment,hours_elapsed,Phylum_plot,relative_abundance
+N-Amend-BR5-10-FT_S119_F_filt.fastq,Five-column effluent,Effluent,NA,Diatom lysate,4,Acidobacteriota,0.0017485470170383985
+N-Amend-BR5-10-FT_S119_F_filt.fastq,Five-column effluent,Effluent,NA,Diatom lysate,4,Bacteroidota,0.03455367343897472
+N-Amend-BR5-10-FT_S119_F_filt.fastq,Five-column effluent,Effluent,NA,Diatom lysate,4,Other,0.07007103472256719
+N-Amend-BR5-10-FT_S119_F_filt.fastq,Five-column effluent,Effluent,NA,Diatom lysate,4,Planctomycetota,0.05577467587303164
+N-Amend-BR5-10-FT_S119_F_filt.fastq,Five-column effluent,Effluent,NA,Diatom lysate,4,Pseudomonadota,0.4847051810640306
+N-Amend-BR5-10-FT_S119_F_filt.fastq,Five-column effluent,Effluent,NA,Diatom lysate,4,Thermoproteota,0.023625254582484725
+N-Amend-BR5-10-FT_S119_F_filt.fastq,Five-column effluent,Effluent,NA,Diatom lysate,4,Unclassified phylum,0.30853906909741197
+N-Amend-BR5-10-FT_S119_F_filt.fastq,Five-column effluent,Effluent,NA,Diatom lysate,4,Verrucomicrobiota,0.02098256420446078
+N-Amend-C-T4_S125_F_filt.fastq,Batch 96 h — diatom lysate — C,Batch culture water,NA,Diatom lysate,96,Acidobacteriota,0
+N-Amend-C-T4_S125_F_filt.fastq,Batch 96 h — diatom lysate — C,Batch culture water,NA,Diatom lysate,96,Bacteroidota,0.021272107169227523
+N-Amend-C-T4_S125_F_filt.fastq,Batch 96 h — diatom lysate — C,Batch culture water,NA,Diatom lysate,96,Other,0.001072395485390809
+N-Amend-C-T4_S125_F_filt.fastq,Batch 96 h — diatom lysate — C,Batch culture water,NA,Diatom lysate,96,Planctomycetota,4.043458387539116e-4
+N-Amend-C-T4_S125_F_filt.fastq,Batch 96 h — diatom lysate — C,Batch culture water,NA,Diatom lysate,96,Pseudomonadota,0.6199500720790408
+N-Amend-C-T4_S125_F_filt.fastq,Batch 96 h — diatom lysate — C,Batch culture water,NA,Diatom lysate,96,Thermoproteota,0
+N-Amend-C-T4_S125_F_filt.fastq,Batch 96 h — diatom lysate — C,Batch culture water,NA,Diatom lysate,96,Unclassified phylum,0.32788931472170463
+N-Amend-C-T4_S125_F_filt.fastq,Batch 96 h — diatom lysate — C,Batch culture water,NA,Diatom lysate,96,Verrucomicrobiota,0.029411764705882353
+N-Amend-D-T4_S126_F_filt.fastq,Batch 96 h — diatom lysate — D,Batch culture water,NA,Diatom lysate,96,Acidobacteriota,0
+N-Amend-D-T4_S126_F_filt.fastq,Batch 96 h — diatom lysate — D,Batch culture water,NA,Diatom lysate,96,Bacteroidota,0.028324180961934068
+N-Amend-D-T4_S126_F_filt.fastq,Batch 96 h — diatom lysate — D,Batch culture water,NA,Diatom lysate,96,Other,0.0019721518556928886
+N-Amend-D-T4_S126_F_filt.fastq,Batch 96 h — diatom lysate — D,Batch culture water,NA,Diatom lysate,96,Planctomycetota,0
+N-Amend-D-T4_S126_F_filt.fastq,Batch 96 h — diatom lysate — D,Batch culture water,NA,Diatom lysate,96,Pseudomonadota,0.7770958363794012
+N-Amend-D-T4_S126_F_filt.fastq,Batch 96 h — diatom lysate — D,Batch culture water,NA,Diatom lysate,96,Thermoproteota,0
+N-Amend-D-T4_S126_F_filt.fastq,Batch 96 h — diatom lysate — D,Batch culture water,NA,Diatom lysate,96,Unclassified phylum,0.17128818919056765
+N-Amend-D-T4_S126_F_filt.fastq,Batch 96 h — diatom lysate — D,Batch culture water,NA,Diatom lysate,96,Verrucomicrobiota,0.021319641612404155
+N-Amend-T0_S124_F_filt.fastq,Batch T0 — diatom lysate,Batch culture water,NA,Diatom lysate,0,Acidobacteriota,0
+N-Amend-T0_S124_F_filt.fastq,Batch T0 — diatom lysate,Batch culture water,NA,Diatom lysate,0,Bacteroidota,0.14076191301084118
+N-Amend-T0_S124_F_filt.fastq,Batch T0 — diatom lysate,Batch culture water,NA,Diatom lysate,0,Other,0.07245247065956432
+N-Amend-T0_S124_F_filt.fastq,Batch T0 — diatom lysate,Batch culture water,NA,Diatom lysate,0,Planctomycetota,0.004763760772595383
+N-Amend-T0_S124_F_filt.fastq,Batch T0 — diatom lysate,Batch culture water,NA,Diatom lysate,0,Pseudomonadota,0.7100168896972846
+N-Amend-T0_S124_F_filt.fastq,Batch T0 — diatom lysate,Batch culture water,NA,Diatom lysate,0,Thermoproteota,0.0031036623215394167
+N-Amend-T0_S124_F_filt.fastq,Batch T0 — diatom lysate,Batch culture water,NA,Diatom lysate,0,Unclassified phylum,0.01730833080709656
+N-Amend-T0_S124_F_filt.fastq,Batch T0 — diatom lysate,Batch culture water,NA,Diatom lysate,0,Verrucomicrobiota,0.05159297273107848
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Beads,Bottom,NA,0,Acidobacteriota,0.03350819672131147
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Beads,Bottom,NA,0,Bacteroidota,0.06019672131147541
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Beads,Bottom,NA,0,Other,0.1232568306010929
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Beads,Bottom,NA,0,Planctomycetota,0.2380327868852459
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Beads,Bottom,NA,0,Pseudomonadota,0.13805464480874316
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Beads,Bottom,NA,0,Thermoproteota,0.11490710382513661
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Beads,Bottom,NA,0,Unclassified phylum,0.26489617486338796
+N-BR10-B_S107_F_filt.fastq,BR10 — bottom,Beads,Bottom,NA,0,Verrucomicrobiota,0.02714754098360656
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Beads,Top,NA,0,Acidobacteriota,0.03996482837749445
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Beads,Top,NA,0,Bacteroidota,0.04638793870701395
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Beads,Top,NA,0,Other,0.10431388528475075
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Beads,Top,NA,0,Planctomycetota,0.2668646857608544
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Beads,Top,NA,0,Pseudomonadota,0.11110157950609606
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Beads,Top,NA,0,Thermoproteota,0.02473808936594572
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Beads,Top,NA,0,Unclassified phylum,0.374374041626902
+N-BR10-T_S108_F_filt.fastq,BR10 — top,Beads,Top,NA,0,Verrucomicrobiota,0.03225495137094266
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Beads,Bottom,NA,0,Acidobacteriota,0.04201083091734588
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Beads,Bottom,NA,0,Bacteroidota,0.0403515489670514
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Beads,Bottom,NA,0,Other,0.0977152963915176
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Beads,Bottom,NA,0,Planctomycetota,0.24907463122002807
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Beads,Bottom,NA,0,Pseudomonadota,0.14280765093083894
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Beads,Bottom,NA,0,Thermoproteota,0.12440967853691447
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Beads,Bottom,NA,0,Unclassified phylum,0.27104644166074066
+N-BR5-B_S99_F_filt.fastq,BR5 — bottom,Beads,Bottom,NA,0,Verrucomicrobiota,0.03258392137556297
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Beads,Top,NA,0,Acidobacteriota,0.05100652295995507
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Beads,Top,NA,0,Bacteroidota,0.02887813728454793
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Beads,Top,NA,0,Other,0.11427059484210982
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Beads,Top,NA,0,Planctomycetota,0.2699252667501836
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Beads,Top,NA,0,Pseudomonadota,0.1264093481359886
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Beads,Top,NA,0,Thermoproteota,0.06234610566331159
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Beads,Top,NA,0,Unclassified phylum,0.33506846948032315
+N-BR5-T_S100_F_filt.fastq,BR5 — top,Beads,Top,NA,0,Verrucomicrobiota,0.012095554883580285
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Beads,Bottom,NA,0,Acidobacteriota,0.03960433999156539
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Beads,Bottom,NA,0,Bacteroidota,0.09232066863474293
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Beads,Bottom,NA,0,Other,0.05683778706437143
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Beads,Bottom,NA,0,Planctomycetota,0.429916037265652
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Beads,Bottom,NA,0,Pseudomonadota,0.10127285971705709
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Beads,Bottom,NA,0,Thermoproteota,0.06552160410995668
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Beads,Bottom,NA,0,Unclassified phylum,0.1640723843116206
+N-BR6-B_S101_F_filt.fastq,BR6 — bottom,Beads,Bottom,NA,0,Verrucomicrobiota,0.05045431890503393
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Beads,Top,NA,0,Acidobacteriota,0.0428812098417176
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Beads,Top,NA,0,Bacteroidota,0.05530089327691584
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Beads,Top,NA,0,Other,0.11015123021469989
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Beads,Top,NA,0,Planctomycetota,0.238167998746278
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Beads,Top,NA,0,Pseudomonadota,0.12641043723554302
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Beads,Top,NA,0,Thermoproteota,0.08272606174580786
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Beads,Top,NA,0,Unclassified phylum,0.32328396803008935
+N-BR6-T_S102_F_filt.fastq,BR6 — top,Beads,Top,NA,0,Verrucomicrobiota,0.02107820090894844
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Beads,Bottom,NA,0,Acidobacteriota,0.034838918568884575
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Beads,Bottom,NA,0,Bacteroidota,0.047790189412336086
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Beads,Bottom,NA,0,Other,0.11785656467540878
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Beads,Bottom,NA,0,Planctomycetota,0.2671523393232961
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Beads,Bottom,NA,0,Pseudomonadota,0.145572284280395
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Beads,Bottom,NA,0,Thermoproteota,0.11921644811397118
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Beads,Bottom,NA,0,Unclassified phylum,0.2386919216448114
+N-BR8-B_S103_F_filt.fastq,BR8 — bottom,Beads,Bottom,NA,0,Verrucomicrobiota,0.028881333980896876
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Beads,Top,NA,0,Acidobacteriota,0.03729560140455858
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Beads,Top,NA,0,Bacteroidota,0.05354360157077853
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Beads,Top,NA,0,Other,0.08175943817656714
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Beads,Top,NA,0,Planctomycetota,0.2505350204658314
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Beads,Top,NA,0,Pseudomonadota,0.17126888154750775
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Beads,Top,NA,0,Thermoproteota,0.05535124353300505
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Beads,Top,NA,0,Unclassified phylum,0.328305179829209
+N-BR8-T_S104_F_filt.fastq,BR8 — top,Beads,Top,NA,0,Verrucomicrobiota,0.021941033472542542
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Beads,Bottom,NA,0,Acidobacteriota,0.032578379982197606
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Beads,Bottom,NA,0,Bacteroidota,0.04883789931757492
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Beads,Bottom,NA,0,Other,0.12517060627039858
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Beads,Bottom,NA,0,Planctomycetota,0.2477301948373059
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Beads,Bottom,NA,0,Pseudomonadota,0.14210266046879635
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Beads,Bottom,NA,0,Thermoproteota,0.10121649688458115
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Beads,Bottom,NA,0,Unclassified phylum,0.2657699535159727
+N-BR9-B_S105_F_filt.fastq,BR9 — bottom,Beads,Bottom,NA,0,Verrucomicrobiota,0.036593808723172784
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Beads,Top,NA,0,Acidobacteriota,0.01704520101735755
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Beads,Top,NA,0,Bacteroidota,0.038730980322163225
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Beads,Top,NA,0,Other,0.08696622194458078
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Beads,Top,NA,0,Planctomycetota,0.2486279059390478
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Beads,Top,NA,0,Pseudomonadota,0.15746731515773504
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Beads,Top,NA,0,Thermoproteota,0.0690286020257909
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Beads,Top,NA,0,Unclassified phylum,0.3607603409040203
+N-BR9-T_S106_F_filt.fastq,BR9 — top,Beads,Top,NA,0,Verrucomicrobiota,0.021373432689304358
+N-Control-A-T4_S122_F_filt.fastq,Batch 96 h — ambient — A,Batch culture water,NA,Ambient,96,Acidobacteriota,0
+N-Control-A-T4_S122_F_filt.fastq,Batch 96 h — ambient — A,Batch culture water,NA,Ambient,96,Bacteroidota,0.11420225071560208
+N-Control-A-T4_S122_F_filt.fastq,Batch 96 h — ambient — A,Batch culture water,NA,Ambient,96,Other,0.029173038466062815
+N-Control-A-T4_S122_F_filt.fastq,Batch 96 h — ambient — A,Batch culture water,NA,Ambient,96,Planctomycetota,9.606712935733051e-4
+N-Control-A-T4_S122_F_filt.fastq,Batch 96 h — ambient — A,Batch culture water,NA,Ambient,96,Pseudomonadota,0.5295651491981336
+N-Control-A-T4_S122_F_filt.fastq,Batch 96 h — ambient — A,Batch culture water,NA,Ambient,96,Thermoproteota,0.003332941222601263
+N-Control-A-T4_S122_F_filt.fastq,Batch 96 h — ambient — A,Batch culture water,NA,Ambient,96,Unclassified phylum,0.18995804415166842
+N-Control-A-T4_S122_F_filt.fastq,Batch 96 h — ambient — A,Batch culture water,NA,Ambient,96,Verrucomicrobiota,0.13280790495235856
+N-Control-B-T4_S123_F_filt.fastq,Batch 96 h — ambient — B,Batch culture water,NA,Ambient,96,Acidobacteriota,0
+N-Control-B-T4_S123_F_filt.fastq,Batch 96 h — ambient — B,Batch culture water,NA,Ambient,96,Bacteroidota,0.13371967161246273
+N-Control-B-T4_S123_F_filt.fastq,Batch 96 h — ambient — B,Batch culture water,NA,Ambient,96,Other,0.037484804582771314
+N-Control-B-T4_S123_F_filt.fastq,Batch 96 h — ambient — B,Batch culture water,NA,Ambient,96,Planctomycetota,0.0015486836189239146
+N-Control-B-T4_S123_F_filt.fastq,Batch 96 h — ambient — B,Batch culture water,NA,Ambient,96,Pseudomonadota,0.4903332167657491
+N-Control-B-T4_S123_F_filt.fastq,Batch 96 h — ambient — B,Batch culture water,NA,Ambient,96,Thermoproteota,8.326256015719971e-4
+N-Control-B-T4_S123_F_filt.fastq,Batch 96 h — ambient — B,Batch culture water,NA,Ambient,96,Unclassified phylum,0.18479292601288905
+N-Control-B-T4_S123_F_filt.fastq,Batch 96 h — ambient — B,Batch culture water,NA,Ambient,96,Verrucomicrobiota,0.1512880718056319
+N-Control-T0_S121_F_filt.fastq,Batch T0 — ambient,Batch culture water,NA,Ambient,0,Acidobacteriota,0
+N-Control-T0_S121_F_filt.fastq,Batch T0 — ambient,Batch culture water,NA,Ambient,0,Bacteroidota,0.1369491525423729
+N-Control-T0_S121_F_filt.fastq,Batch T0 — ambient,Batch culture water,NA,Ambient,0,Other,0.061148775894538605
+N-Control-T0_S121_F_filt.fastq,Batch T0 — ambient,Batch culture water,NA,Ambient,0,Planctomycetota,0.001807909604519774
+N-Control-T0_S121_F_filt.fastq,Batch T0 — ambient,Batch culture water,NA,Ambient,0,Pseudomonadota,0.7541431261770245
+N-Control-T0_S121_F_filt.fastq,Batch T0 — ambient,Batch culture water,NA,Ambient,0,Thermoproteota,0.006610169491525424
+N-Control-T0_S121_F_filt.fastq,Batch T0 — ambient,Batch culture water,NA,Ambient,0,Unclassified phylum,0.01847457627118644
+N-Control-T0_S121_F_filt.fastq,Batch T0 — ambient,Batch culture water,NA,Ambient,0,Verrucomicrobiota,0.020866290018832393

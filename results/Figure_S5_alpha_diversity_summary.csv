@@ -1,0 +1,9 @@
+dna_type_plot,sample_location,measure,n,mean_value,sd_value
+Beads,0 cm,retained_asvs,5,741.8,174.70460783848833
+Beads,0 cm,Shannon,5,5.759961267522444,0.4532501073403117
+Beads,70 cm,retained_asvs,5,704,243.54876308452071
+Beads,70 cm,Shannon,5,5.863448695975848,0.30636575327332705
+Water,Bottle,retained_asvs,6,166.83333333333334,38.09155636970832
+Water,Bottle,Shannon,6,3.9768132584763496,0.5451103710713753
+Water,Outflow,retained_asvs,1,910,NA
+Water,Outflow,Shannon,1,5.5816459261753515,NA

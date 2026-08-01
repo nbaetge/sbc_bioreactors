@@ -1,0 +1,4 @@
+metric,n_pairs,statistic,p_value,p_adjusted_bh
+retained_asvs,5,7,1,1
+Shannon,5,8,1,1
+Simpson,5,12,0.2807126652684958,0.8421379958054874

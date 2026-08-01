@@ -1,0 +1,18 @@
+sample_id,sample_material,incubation_stage,treatment,bead_position,bioreactor,bottle,hours_elapsed
+N-Control-T0_S121_F_filt.fastq,Batch culture water,Batch T0,Ambient,NA,,AB,0
+N-Amend-T0_S124_F_filt.fastq,Batch culture water,Batch T0,Diatom lysate,NA,,CD,0
+N-Control-A-T4_S122_F_filt.fastq,Batch culture water,Batch 96 h,Ambient,NA,,A,96
+N-Control-B-T4_S123_F_filt.fastq,Batch culture water,Batch 96 h,Ambient,NA,,B,96
+N-Amend-C-T4_S125_F_filt.fastq,Batch culture water,Batch 96 h,Diatom lysate,NA,,C,96
+N-Amend-D-T4_S126_F_filt.fastq,Batch culture water,Batch 96 h,Diatom lysate,NA,,D,96
+N-BR5-B_S99_F_filt.fastq,Beads,Beads — bottom,NA,Bottom,5,,0
+N-BR6-B_S101_F_filt.fastq,Beads,Beads — bottom,NA,Bottom,6,,0
+N-BR8-B_S103_F_filt.fastq,Beads,Beads — bottom,NA,Bottom,8,,0
+N-BR9-B_S105_F_filt.fastq,Beads,Beads — bottom,NA,Bottom,9,,0
+N-BR10-B_S107_F_filt.fastq,Beads,Beads — bottom,NA,Bottom,10,,0
+N-BR5-T_S100_F_filt.fastq,Beads,Beads — top,NA,Top,5,,0
+N-BR6-T_S102_F_filt.fastq,Beads,Beads — top,NA,Top,6,,0
+N-BR8-T_S104_F_filt.fastq,Beads,Beads — top,NA,Top,8,,0
+N-BR9-T_S106_F_filt.fastq,Beads,Beads — top,NA,Top,9,,0
+N-BR10-T_S108_F_filt.fastq,Beads,Beads — top,NA,Top,10,,0
+N-Amend-BR5-10-FT_S119_F_filt.fastq,Effluent,Bioreactor effluent,Diatom lysate,NA,5_6_8_9_10,,4
