@@ -1561,8 +1561,8 @@ s3_plot <- ggplot(
     linewidth = 0.4
   ) +
   geom_point(
-    aes(fill = beads, shape = flow_rate_factor),
-    color = "black",
+    aes(color = beads, shape = flow_rate_factor),
+    # color = "black",
     stroke = 0.5,
     size = 3,
     alpha = 0.85
@@ -1598,11 +1598,11 @@ s3_plot <- ggplot(
       "Single-column DOC removal (" * mu * "mol C L"^{-1} * ")"
     ),
     shape = expression("Flow rate (mL min"^{-1} * ")"),
-    caption = paste(
-      "Points are individual bioreactor columns.",
-      "Lines are unadjusted bead-specific OLS fits with 95% confidence intervals;",
-      "the accompanying model adjusts for water source, treatment, and flow rate."
-    )
+    # caption = paste(
+    #   "Points are individual bioreactor columns.",
+    #   "Lines are unadjusted bead-specific OLS fits with 95% confidence intervals;",
+    #   "the accompanying model adjusts for water source, treatment, and flow rate."
+    # )
   ) +
   theme_bw(base_size = 11) +
   theme(
@@ -1610,7 +1610,7 @@ s3_plot <- ggplot(
     panel.grid.minor = element_blank()
   ) + 
   guides(
-  color = "none",
+fill = "none",
   fill = guide_legend(
     order = 1,
     title = "Bead configuration",
